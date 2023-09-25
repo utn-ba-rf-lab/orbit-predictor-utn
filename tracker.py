@@ -8,8 +8,7 @@ import subprocess
 MAX_AWAITABLE_PASSES = 5
 LAUNCH_BEFORE_SECS = dt.timedelta(seconds=10)
 
-async def pass_worker(queue, finish_sem):
-    work_item = await queue.get()
+async def pass_worker(work_item, finish_sem):
     aos = work_item["aos"]
     freq = work_item["freq"]
     cmdline = work_item["cmdline"]
@@ -37,7 +36,6 @@ async def main():
     pred_db = []
     task_list = []
     task_count_sem = asyncio.BoundedSemaphore(value = MAX_AWAITABLE_PASSES)
-    pass_sync_queue = asyncio.Queue(maxsize=1)
 
     print(track_list.values())
 
@@ -68,9 +66,9 @@ async def main():
             time = current_earlier_pass.aos
             cmdline = track_list[satpass.sate_id].get_script()
             freq = track_list[satpass.sate_id].get_freq()
-            await pass_sync_queue.put({"aos":time, "freq":freq, "cmdline":cmdline})
+            work_obj = {"aos":time, "freq":freq, "cmdline":cmdline}
             await task_count_sem.acquire()
-            task_list.append(asyncio.create_task(pass_worker(queue=pass_sync_queue, finish_sem=task_count_sem)))
+            task_list.append(asyncio.create_task(pass_worker(work_obj, task_count_sem)))
             
 
         # aos = satpass.aos
