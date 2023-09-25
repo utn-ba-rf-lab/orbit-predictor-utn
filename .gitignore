@@ -178,3 +178,4 @@ pyrightconfig.json
 # destrackeo de config y de carpeta fetchs
 fetchs/
 cfg.json
+*.sh

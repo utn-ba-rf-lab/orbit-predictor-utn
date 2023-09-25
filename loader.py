@@ -83,7 +83,7 @@ class SatLoader():
     
     def __init__(self, cfgfile=''):
 
-        self.__satlist = []
+        self.__satlist = {}
 
         if (cfgfile != '' and os.path.isfile(os.path.abspath(cfgfile))):
             self.__cfgfile = os.path.abspath(cfgfile)
@@ -108,21 +108,19 @@ class SatLoader():
 
     def __parse_satlist_from_json_arr(self, jsonarr):
         
-        seen_catnums = []
         
         for sat in jsonarr:
             if (sat.get('catnum', None) != None):
                 catnum = int(sat.get('catnum'))
-                if (catnum > 0 and catnum < 999999999 and not (catnum in seen_catnums)):
+                if (catnum > 0 and catnum < 999999999 and not (catnum in self.__satlist.keys())):
                     freq = float(sat.get('freq', 0))
                     if (freq < 0):
                         #habria que avisar de esto
                         freq = abs(freq)
                     if (sat.get('script', None) != None):
                         script = os.path.abspath(sat['script'])
-                        #por el momento si no hay script no lo considero tampoco
-                        self.__satlist.append(SatTrackCfg(catnum, freq, script))
-                        seen_catnums.append(catnum)
+                        if (script != ""):
+                            self.__satlist[catnum] = SatTrackCfg(catnum, freq, script)
 
 
     def __parse_global_params_from_json_obj(self, jsonobj):
@@ -168,7 +166,7 @@ class SatLoader():
     def get_tle_db(self) -> CustomMemoryTLESource:
         return self.__tle_src_db
 
-    def get_tracked_list(self) -> list[SatTrackCfg]:
+    def get_tracked_list(self) -> dict[int,SatTrackCfg]:
         return self.__satlist
     
     def get_location(self) -> Location:
