@@ -7,22 +7,28 @@ import subprocess
 
 MAX_AWAITABLE_PASSES = 5
 LAUNCH_BEFORE_SECS = dt.timedelta(seconds=10)
+TEST_DIR="/tmp/orbit-predictor/"
 
 async def pass_worker(work_item, finish_sem):
     aos = work_item["aos"]
     freq = work_item["freq"]
     cmdline = work_item["cmdline"]
+    name = work_item["name"]
     sleep_t = aos.astimezone(tz=dt.timezone.utc) - dt.datetime.now(dt.timezone.utc) - LAUNCH_BEFORE_SECS
     sleep_t = sleep_t.total_seconds()
 
-    print("Worker info: ")
-    print("AOS (UTC): ", aos.astimezone(tz=dt.timezone.utc))
-    print("deltaT: ", sleep_t)
-    print("Freq: ", freq)
-    print("CMD: ", cmdline)
-    print("###\n\n")
+    # print("Worker info: ")
+    # print("AOS (UTC): ", aos.astimezone(tz=dt.timezone.utc))
+    # print("deltaT: ", sleep_t)
+    # print("Freq: ", freq)
+    # print("CMD: ", cmdline)
+    # print("###\n\n")
 
-    await asyncio.sleep(5)
+    await asyncio.sleep(sleep_t)
+
+    proc = await asyncio.create_subprocess_exec(cmdline, str("SAT" + name + "will pass above us in " + str(LAUNCH_BEFORE_SECS) + "secs!\n"))
+    await proc.wait()
+
     finish_sem.release()
 
 
@@ -37,7 +43,9 @@ async def main():
     task_list = []
     task_count_sem = asyncio.BoundedSemaphore(value = MAX_AWAITABLE_PASSES)
 
-    print(track_list.values())
+    
+
+    #print(track_list.values())
 
     for t_sat in track_list.values():
         p = tles.get_predictor(t_sat.get_id())
@@ -64,9 +72,9 @@ async def main():
         if not (current_earlier_pass is None):
             next_pass_date = current_earlier_pass.los.astimezone(tz=dt.timezone.utc)
             time = current_earlier_pass.aos
-            cmdline = track_list[satpass.sate_id].get_script()
-            freq = track_list[satpass.sate_id].get_freq()
-            work_obj = {"aos":time, "freq":freq, "cmdline":cmdline}
+            cmdline = track_list[current_earlier_pass.sate_id].get_script()
+            freq = track_list[current_earlier_pass.sate_id].get_freq()
+            work_obj = {"aos":time, "freq":freq, "cmdline":cmdline, "name":tles.get_name_from_id(current_earlier_pass.sate_id)}
             await task_count_sem.acquire()
             task_list.append(asyncio.create_task(pass_worker(work_obj, task_count_sem)))
             
