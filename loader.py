@@ -13,10 +13,8 @@ import os
 import json
 
 DEFAULT_CFG_FILENAME = 'cfg.json'
-
-## Una milanesa espacial (MILANESAT)
 DEFAULT_CFG_OBJ = {'global-params':{'min-elev': 40, 'loc-lat':0, 'loc-long':0, 'loc-elev':0},
-                   'tracked-sats':[{'catnum':'42760',
+                   'tracked-sats':[{'catnum':'33591',
                                     'freq':'0.0',
                                     'script':''}]
                     }
@@ -59,21 +57,6 @@ class CustomMemoryTLESource(TLESource):
             return self.db[sate_id].get('alias', "")
         return ""
 
-class SatTrackCfg():
-    def __init__(self, id:int, freq:float, script_path:str):
-        self.__id = id
-        self.__freq = freq
-        self.__script_path = script_path
-
-    def get_id(self) -> int:
-        return self.__id
-    
-    def get_freq(self) -> float:
-        return self.__freq
-    
-    def get_script(self) -> os.path:
-        return os.path.abspath(self.__script_path)
-
 class SatLoader():
     
     def __new__(cls):
@@ -108,7 +91,6 @@ class SatLoader():
 
     def __parse_satlist_from_json_arr(self, jsonarr):
         
-        
         for sat in jsonarr:
             if (sat.get('catnum', None) != None):
                 catnum = int(sat.get('catnum'))
@@ -120,7 +102,11 @@ class SatLoader():
                     if (sat.get('script', None) != None):
                         script = os.path.abspath(sat['script'])
                         if (script != ""):
-                            self.__satlist[catnum] = SatTrackCfg(catnum, freq, script)
+                            config_dict = {
+                                "freq":freq,
+                                "cmd":script,
+                            }
+                            self.__satlist[catnum] = config_dict
 
 
     def __parse_global_params_from_json_obj(self, jsonobj):
@@ -163,14 +149,20 @@ class SatLoader():
         
         self.__tle_src_db = db
 
+    def update_tle_db(self):
+        self.__load_tles_to_mem()
+
     def get_tle_db(self) -> CustomMemoryTLESource:
         return self.__tle_src_db
 
-    def get_tracked_list(self) -> dict[int,SatTrackCfg]:
+    def get_tracked_list(self) -> dict[int,dict[str, str]]:
         return self.__satlist
     
     def get_location(self) -> Location:
         return Location('loc', self.loc_lat, self.loc_long, self.loc_elev)
+    
+    def get_minimal_elevation(self) -> int:
+        return self.min_elev
     
 
             

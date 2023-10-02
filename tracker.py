@@ -9,7 +9,67 @@ MAX_AWAITABLE_PASSES = 5
 LAUNCH_BEFORE_SECS = dt.timedelta(seconds=10)
 TEST_DIR="/tmp/orbit-predictor/"
 
+
+class Tracker:
+
+    def __new__(cls):
+        if not hasattr(cls, 'instance'):
+            cls.instance = super(SatLoader, cls).__new__(cls)
+        return cls.instance
+
+    def __init__(self) -> None:
+        self._loader = SatLoader()
+        self._location = self._loader.get_location()
+        self._tracked_list = self._loader.get_tracked_list()
+        self._tle_db = []
+        self._predictor_db = []
+
+        self._worker_sem = asyncio.BoundedSemaphore(value = MAX_AWAITABLE_PASSES)
+        self._update_tle_sem = asyncio.BoundedSemaphore()
+
+        self.update_tle_srcs()
+
+    def update_tle_srcs(self) -> None:
+        
+        self._tle_db = self._loader.get_tle_db()
+        self._predictor_db.clear()
+
+        for t_sat in self._tracked_list.keys():
+            pred = self._tle_db.get_predictor(t_sat)
+            self._predictor_db.append(pred)
+
+    def get_next_pass(self, when_utc:dt.datetime):
+
+        candidate_pass = None
+
+        for pred in self._predictor_db:
+            satpass = pred.get_next_pass(self._location, max_elevation_gt=self._loader.get_minimal_elevation(), when_utc=when_utc)
+            aos_utc = satpass.aos.astimezone(tz=dt.timezone.utc)
+
+            if (candidate_pass is None):
+                candidate_pass = satpass
+            else:
+                if (aos_utc < candidate_pass.aos.astimezone(tz=dt.datetime.utc)):
+                    candidate_pass = satpass
+
+        if not (candidate_pass is None):
+            pass_obj = {
+                "id" : candidate_pass.sate_id,
+                "name" : self._tle_db.get_name_from_id(candidate_pass.sate_id),
+                "aos" : candidate_pass.aos,
+                "los" : candidate_pass.los,
+                "freq" : self._tracked_list[candidate_pass.sate_id]["freq"],
+                "cmd" : self._tracked_list[candidate_pass.sate_id]["cmd"]
+            }
+            return pass_obj
+        
+        return None
+
+
+
+
 async def pass_worker(work_item, finish_sem):
+
     aos = work_item["aos"]
     freq = work_item["freq"]
     cmdline = work_item["cmdline"]
@@ -26,57 +86,41 @@ async def pass_worker(work_item, finish_sem):
 
     await asyncio.sleep(sleep_t)
 
-    proc = await asyncio.create_subprocess_exec(cmdline, str("SAT" + name + "will pass above us in " + str(LAUNCH_BEFORE_SECS) + "secs!\n"))
+    proc = await asyncio.create_subprocess_exec(cmdline, str("SAT " + name + " will pass above us in " + str(LAUNCH_BEFORE_SECS) + " secs!\n"))
     await proc.wait()
 
     finish_sem.release()
 
 
+async def update_tle_worker(loader:SatLoader, track_list:list, tle_list:list, predictor_db:list, lock_sem:asyncio.BoundedSemaphore) -> None:
+
+    
+    while(True):
+    
+        await lock_sem.acquire()
+
+        loader.update_tle_db()
+        tle_list = loader.get_tle_db()
+        predictor_db.clear()
+
+        for t_sat in track_list.values():
+            p = tle_list.get_predictor(t_sat.get_id())
+            predictor_db.append(p)
+
+        await lock_sem.release()
+
+        await asyncio.sleep(86400)
+
+
 async def main():
 
-    loader = SatLoader()
-    track_list = loader.get_tracked_list()
-    tles = loader.get_tle_db()
-    loc = loader.get_location()
-
-    pred_db = []
-    task_list = []
     task_count_sem = asyncio.BoundedSemaphore(value = MAX_AWAITABLE_PASSES)
+    task_update_tle = asyncio.BoundedSemaphore()
+
+    next_pass_date = dt.datetime.now(tz=dt.timezone.utc)
 
     
 
-    #print(track_list.values())
-
-    for t_sat in track_list.values():
-        p = tles.get_predictor(t_sat.get_id())
-        pred_db.append(p)
-
-    next_pass_date = 0
-
-    while (True):
-        
-        current_earlier_pass = None
-        
-        if (len(task_list) == 0):
-            next_pass_date = dt.datetime.now(tz=dt.timezone.utc)
-
-        for p in pred_db:
-            satpass = p.get_next_pass(loc, max_elevation_gt=loader.min_elev, when_utc=next_pass_date)
-            aos_utc = satpass.aos.astimezone(tz=dt.timezone.utc)
-            if (current_earlier_pass is None):
-                current_earlier_pass = satpass
-            else:
-                if (aos_utc < current_earlier_pass.aos.astimezone(tz=dt.timezone.utc)):
-                    current_earlier_pass = satpass
-
-        if not (current_earlier_pass is None):
-            next_pass_date = current_earlier_pass.los.astimezone(tz=dt.timezone.utc)
-            time = current_earlier_pass.aos
-            cmdline = track_list[current_earlier_pass.sate_id].get_script()
-            freq = track_list[current_earlier_pass.sate_id].get_freq()
-            work_obj = {"aos":time, "freq":freq, "cmdline":cmdline, "name":tles.get_name_from_id(current_earlier_pass.sate_id)}
-            await task_count_sem.acquire()
-            task_list.append(asyncio.create_task(pass_worker(work_obj, task_count_sem)))
             
 
         # aos = satpass.aos
