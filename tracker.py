@@ -1,5 +1,4 @@
 from loader import SatLoader
-from loader import SatTrackCfg
 from orbit_predictor.predictors import TLEPredictor
 import datetime as dt
 import asyncio
@@ -7,27 +6,58 @@ import subprocess
 
 MAX_AWAITABLE_PASSES = 5
 LAUNCH_BEFORE_SECS = dt.timedelta(seconds=10)
-TEST_DIR="/tmp/orbit-predictor/"
+UPDATE_TLE_SECS = dt.timedelta(weeks=1)
+TEST_FILE="orbit_predictor.txt"
 
 
 class Tracker:
 
     def __new__(cls):
         if not hasattr(cls, 'instance'):
-            cls.instance = super(SatLoader, cls).__new__(cls)
+            cls.instance = super(Tracker, cls).__new__(cls)
         return cls.instance
 
     def __init__(self) -> None:
         self._loader = SatLoader()
         self._location = self._loader.get_location()
         self._tracked_list = self._loader.get_tracked_list()
+        self._min_elev = self._loader.get_minimal_elevation()
+        self._last_update_time_utc = None
         self._tle_db = []
         self._predictor_db = []
 
         self._worker_sem = asyncio.BoundedSemaphore(value = MAX_AWAITABLE_PASSES)
-        self._update_tle_sem = asyncio.BoundedSemaphore()
 
         self.update_tle_srcs()
+
+    async def run_w_testfile(self) -> None:
+
+        testfile = open(TEST_FILE, "a")
+
+        earlier_pass_date_utc = dt.datetime.now(tz=dt.timezone.utc)
+
+        while (True) :
+
+            if (not self._worker_sem.locked()):
+                #launch worker
+                await self._worker_sem.acquire()
+                next_pass = self.get_next_pass(earlier_pass_date_utc)
+                earlier_pass_date_utc = next_pass["aos"]
+                asyncio.create_task(pass_worker_w_file(next_pass, self._worker_sem, testfile))
+                
+            else:
+                #wait for worker release or timeout to update TLE's DB
+                upd_timeout = self._last_update_time_utc + UPDATE_TLE_SECS - dt.datetime.now(tz=dt.timezone.utc)
+                try:
+                    #await and immediate release so as not to consume
+                    #the available slot for running another worker.
+                    await asyncio.wait_for(self._worker_sem.acquire(), timeout=upd_timeout.total_seconds())
+                    self._worker_sem.release()
+                except asyncio.exceptions.TimeoutError:
+                    #update TLE DB
+                    self.update_tle_srcs()
+                    testfile.write("[" + str(dt.datetime.now()) + "] ")
+                    testfile.write("Updated TLE Database! \r\n")
 
     def update_tle_srcs(self) -> None:
         
@@ -38,12 +68,14 @@ class Tracker:
             pred = self._tle_db.get_predictor(t_sat)
             self._predictor_db.append(pred)
 
+        self._last_update_time_utc = dt.datetime.now(tz=dt.timezone.utc)
+
     def get_next_pass(self, when_utc:dt.datetime):
 
         candidate_pass = None
 
         for pred in self._predictor_db:
-            satpass = pred.get_next_pass(self._location, max_elevation_gt=self._loader.get_minimal_elevation(), when_utc=when_utc)
+            satpass = pred.get_next_pass(self._location, max_elevation_gt=self._min_elev, when_utc=when_utc)
             aos_utc = satpass.aos.astimezone(tz=dt.timezone.utc)
 
             if (candidate_pass is None):
@@ -66,13 +98,28 @@ class Tracker:
         return None
 
 
-
-
-async def pass_worker(work_item, finish_sem):
-
+async def pass_worker_w_script(work_item, finish_sem):
     aos = work_item["aos"]
     freq = work_item["freq"]
-    cmdline = work_item["cmdline"]
+    cmdline = work_item["cmd"]
+    name = work_item["name"]
+    sleep_t = aos.astimezone(tz=dt.timezone.utc) - dt.datetime.now(dt.timezone.utc) - LAUNCH_BEFORE_SECS
+    sleep_t = sleep_t.total_seconds()
+
+    await asyncio.sleep(sleep_t)
+
+    proc = await asyncio.create_subprocess_exec(cmdline, str("SAT " + name + " will pass above us in " + str(LAUNCH_BEFORE_SECS) + " secs!\n"))
+    await proc.wait()
+
+    finish_sem.release()
+
+
+async def pass_worker_w_file(work_item, finish_sem, test_file):
+
+    aos = work_item["aos"]
+    los = work_item["los"]
+    freq = work_item["freq"]
+    cmdline = work_item["cmd"]
     name = work_item["name"]
     sleep_t = aos.astimezone(tz=dt.timezone.utc) - dt.datetime.now(dt.timezone.utc) - LAUNCH_BEFORE_SECS
     sleep_t = sleep_t.total_seconds()
@@ -86,61 +133,20 @@ async def pass_worker(work_item, finish_sem):
 
     await asyncio.sleep(sleep_t)
 
-    proc = await asyncio.create_subprocess_exec(cmdline, str("SAT " + name + " will pass above us in " + str(LAUNCH_BEFORE_SECS) + " secs!\n"))
-    await proc.wait()
+    test_file.write("[" + str(dt.datetime.now()) + "] ")
+    test_file.write("SAT: " + name + ", ")
+    test_file.write("AOS (LOCAL): " + aos + ", ")
+    test_file.write("LOS (LOCAL): " + los + ", ")
+    test_file.write("f: " + freq + " MHz, ")
+    test_file.write("cmd: \"" + cmdline + "\" ")
+    test_file.write("Will pass above us in 10 secs \r\n")
 
     finish_sem.release()
 
 
-async def update_tle_worker(loader:SatLoader, track_list:list, tle_list:list, predictor_db:list, lock_sem:asyncio.BoundedSemaphore) -> None:
-
-    
-    while(True):
-    
-        await lock_sem.acquire()
-
-        loader.update_tle_db()
-        tle_list = loader.get_tle_db()
-        predictor_db.clear()
-
-        for t_sat in track_list.values():
-            p = tle_list.get_predictor(t_sat.get_id())
-            predictor_db.append(p)
-
-        await lock_sem.release()
-
-        await asyncio.sleep(86400)
 
 
-async def main():
-
-    task_count_sem = asyncio.BoundedSemaphore(value = MAX_AWAITABLE_PASSES)
-    task_update_tle = asyncio.BoundedSemaphore()
-
-    next_pass_date = dt.datetime.now(tz=dt.timezone.utc)
-
-    
-
-            
-
-        # aos = satpass.aos
-        # if (aos.tzinfo != None):
-        #     aos = aos.astimezone(tz=None)
-            
-        # los = satpass.los
-        # if (los.tzinfo != None):
-        #     los = los.astimezone(tz=None)
-
-        # print("SATPASS\n")
-        # print("ID: ", satpass.sate_id)
-        # print("NAME: ", tles.get_name_from_id(satpass.sate_id))
-        # print("DURATION (seg): ", satpass.duration_s)
-        # print("AOS (UTC -3): ", aos)
-        # print("LOS (UTC -3): ", los)
-        # print("MAX-EL: ", satpass.max_elevation_deg)
-
-        
-
-asyncio.run(main())
+tracker = Tracker()
+asyncio.run(tracker.run_w_testfile())
 
 
