@@ -81,7 +81,7 @@ class Tracker:
             if (candidate_pass is None):
                 candidate_pass = satpass
             else:
-                if (aos_utc < candidate_pass.aos.astimezone(tz=dt.datetime.utc)):
+                if (aos_utc < candidate_pass.aos.astimezone(tz=dt.timezone.utc)):
                     candidate_pass = satpass
 
         if not (candidate_pass is None):
