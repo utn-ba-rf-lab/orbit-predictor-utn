@@ -1,8 +1,8 @@
 from loader import SatLoader
-from orbit_predictor.predictors import TLEPredictor
+from util_types import SatPass
 import datetime as dt
 import asyncio
-import subprocess
+
 
 MAX_AWAITABLE_PASSES = 5
 LAUNCH_BEFORE_SECS = dt.timedelta(seconds=10)
@@ -42,7 +42,7 @@ class Tracker:
                 #launch worker
                 await self._worker_sem.acquire()
                 next_pass = self.get_next_pass(earlier_pass_date_utc)
-                earlier_pass_date_utc = next_pass["aos"]
+                earlier_pass_date_utc = next_pass.aos
                 asyncio.create_task(pass_worker_w_file(next_pass, self._worker_sem, testfile))
                 
             else:
@@ -85,14 +85,12 @@ class Tracker:
                     candidate_pass = satpass
 
         if not (candidate_pass is None):
-            pass_obj = {
-                "id" : candidate_pass.sate_id,
-                "name" : self._tle_db.get_name_from_id(candidate_pass.sate_id),
-                "aos" : candidate_pass.aos,
-                "los" : candidate_pass.los,
-                "freq" : self._tracked_list[candidate_pass.sate_id]["freq"],
-                "cmd" : self._tracked_list[candidate_pass.sate_id]["cmd"]
-            }
+            pass_obj = SatPass(candidate_pass, 
+                               self._tle_db.get_name_from_id(candidate_pass.sate_id),
+                               candidate_pass.aos,
+                               candidate_pass.los,
+                               self._tracked_list[candidate_pass.sate_id]["freq"],
+                               self._tracked_list[candidate_pass.sate_id]["cmd"])
             return pass_obj
         
         return None
@@ -114,36 +112,30 @@ async def pass_worker_w_script(work_item, finish_sem):
     finish_sem.release()
 
 
-async def pass_worker_w_file(work_item, finish_sem, test_file):
+async def pass_worker_w_file(work_item:SatPass, finish_sem, test_file):
 
-    aos = work_item["aos"]
-    los = work_item["los"]
-    freq = work_item["freq"]
-    cmdline = work_item["cmd"]
-    name = work_item["name"]
-    sleep_t = aos.astimezone(tz=dt.timezone.utc) - dt.datetime.now(dt.timezone.utc) - LAUNCH_BEFORE_SECS
-    sleep_t = sleep_t.total_seconds()
+    if not (work_item is None):
+        sleep_t = work_item.aos.astimezone(tz=dt.timezone.utc) - dt.datetime.now(dt.timezone.utc) - LAUNCH_BEFORE_SECS
+        sleep_t = sleep_t.total_seconds()
 
-    # print("Worker info: ")
-    # print("AOS (UTC): ", aos.astimezone(tz=dt.timezone.utc))
-    # print("deltaT: ", sleep_t)
-    # print("Freq: ", freq)
-    # print("CMD: ", cmdline)
-    # print("###\n\n")
+        # print("Worker info: ")
+        # print("AOS (UTC): ", aos.astimezone(tz=dt.timezone.utc))
+        # print("deltaT: ", sleep_t)
+        # print("Freq: ", freq)
+        # print("CMD: ", cmdline)
+        # print("###\n\n")
 
-    await asyncio.sleep(sleep_t)
+        await asyncio.sleep(sleep_t)
 
-    test_file.write("[" + str(dt.datetime.now()) + "] ")
-    test_file.write("SAT: " + name + ", ")
-    test_file.write("AOS (LOCAL): " + aos + ", ")
-    test_file.write("LOS (LOCAL): " + los + ", ")
-    test_file.write("f: " + freq + " MHz, ")
-    test_file.write("cmd: \"" + cmdline + "\" ")
-    test_file.write("Will pass above us in 10 secs \r\n")
+        test_file.write("[" + str(dt.datetime.now()) + "] ")
+        test_file.write("SAT: " + work_item.name + ", ")
+        test_file.write("AOS (LOCAL): " + work_item.aos + ", ")
+        test_file.write("LOS (LOCAL): " + work_item.los + ", ")
+        test_file.write("f: " + work_item.freq + " MHz, ")
+        test_file.write("cmd: \"" + work_item.cmd + "\" ")
+        test_file.write("Will pass above us in 10 secs \r\n")
 
-    finish_sem.release()
-
-
+        finish_sem.release()
 
 
 tracker = Tracker()
