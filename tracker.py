@@ -32,7 +32,9 @@ class Tracker:
 
     async def run_w_testfile(self) -> None:
 
-        testfile = open(TEST_FILE, "a")
+        testfile = open(TEST_FILE, "at")
+
+        w_lock = asyncio.Lock()
 
         earlier_pass_date_utc = dt.datetime.now(tz=dt.timezone.utc)
 
@@ -43,7 +45,7 @@ class Tracker:
                 await self._worker_sem.acquire()
                 next_pass = self.get_next_pass(earlier_pass_date_utc)
                 earlier_pass_date_utc = next_pass.aos
-                asyncio.create_task(pass_worker_w_file(next_pass, self._worker_sem, testfile))
+                asyncio.create_task(pass_worker_w_file(next_pass, self._worker_sem, testfile, w_lock))
                 
             else:
                 #wait for worker release or timeout to update TLE's DB
@@ -112,7 +114,7 @@ async def pass_worker_w_script(work_item, finish_sem):
     finish_sem.release()
 
 
-async def pass_worker_w_file(work_item:SatPass, finish_sem, test_file):
+async def pass_worker_w_file(work_item:SatPass, finish_sem, test_file, w_lock):
 
     if not (work_item is None):
         sleep_t = work_item.aos.astimezone(tz=dt.timezone.utc) - dt.datetime.now(dt.timezone.utc) - LAUNCH_BEFORE_SECS
@@ -125,15 +127,16 @@ async def pass_worker_w_file(work_item:SatPass, finish_sem, test_file):
         # print("CMD: ", cmdline)
         # print("###\n\n")
 
-        await asyncio.sleep(sleep_t)
+        await asyncio.sleep(2)
 
-        test_file.write("[" + str(dt.datetime.now()) + "] ")
-        test_file.write("SAT: " + work_item.name + ", ")
-        test_file.write("AOS (LOCAL): " + work_item.aos + ", ")
-        test_file.write("LOS (LOCAL): " + work_item.los + ", ")
-        test_file.write("f: " + work_item.freq + " MHz, ")
-        test_file.write("cmd: \"" + work_item.cmd + "\" ")
-        test_file.write("Will pass above us in 10 secs \r\n")
+        async with w_lock:
+            test_file.write("[" + str(dt.datetime.now()) + "] ")
+            test_file.write("SAT: " + work_item.name + ", ")
+            test_file.write("AOS (LOCAL): " + str(work_item.aos) + ", ")
+            test_file.write("LOS (LOCAL): " + str(work_item.los) + ", ")
+            test_file.write("f: " + str(work_item.freq) + " MHz, ")
+            test_file.write("cmd: \"" + str(work_item.cmd) + "\" ")
+            test_file.write("Will pass above us in 10 secs \r\n")    
 
         finish_sem.release()
 
