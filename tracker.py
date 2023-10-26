@@ -127,7 +127,7 @@ async def pass_worker_w_file(work_item:SatPass, finish_sem, test_file, w_lock):
         # print("CMD: ", cmdline)
         # print("###\n\n")
 
-        await asyncio.sleep(2)
+        await asyncio.sleep(sleep_t)
 
         async with w_lock:
             test_file.write("[" + str(dt.datetime.now()) + "] ")
