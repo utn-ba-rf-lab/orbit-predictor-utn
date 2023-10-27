@@ -26,26 +26,28 @@ class Tracker:
         self._tle_db = []
         self._predictor_db = []
 
-        self._worker_sem = asyncio.BoundedSemaphore(value = MAX_AWAITABLE_PASSES)
+        sem_val = min(MAX_AWAITABLE_PASSES, len(self._tracked_list.keys()))
+        self._worker_sem = asyncio.BoundedSemaphore(value = sem_val)
 
         self.update_tle_srcs()
 
     async def run_w_testfile(self) -> None:
 
         testfile = open(TEST_FILE, "at")
-
         w_lock = asyncio.Lock()
 
         earlier_pass_date_utc = dt.datetime.now(tz=dt.timezone.utc)
+        ignore_list = []
 
         while (True) :
 
             if (not self._worker_sem.locked()):
                 #launch worker
                 await self._worker_sem.acquire()
-                next_pass = self.get_next_pass(earlier_pass_date_utc)
+                next_pass = self.get_next_pass(earlier_pass_date_utc, ignore_list)
+                ignore_list.append(next_pass.id)
                 earlier_pass_date_utc = next_pass.aos
-                asyncio.create_task(pass_worker_w_file(next_pass, self._worker_sem, testfile, w_lock))
+                asyncio.create_task(pass_worker_w_file(next_pass, self._worker_sem, ignore_list, testfile, w_lock))
                 
             else:
                 #wait for worker release or timeout to update TLE's DB
@@ -72,12 +74,16 @@ class Tracker:
 
         self._last_update_time_utc = dt.datetime.now(tz=dt.timezone.utc)
 
-    def get_next_pass(self, when_utc:dt.datetime):
+    def get_next_pass(self, when_utc:dt.datetime, ignore_list:list[int]) -> SatPass:
 
         candidate_pass = None
 
         for pred in self._predictor_db:
             satpass = pred.get_next_pass(self._location, max_elevation_gt=self._min_elev, when_utc=when_utc)
+            if not (ignore_list is None):
+                if satpass.sate_id in ignore_list:
+                    continue
+
             aos_utc = satpass.aos.astimezone(tz=dt.timezone.utc)
 
             if (candidate_pass is None):
@@ -87,7 +93,7 @@ class Tracker:
                     candidate_pass = satpass
 
         if not (candidate_pass is None):
-            pass_obj = SatPass(candidate_pass, 
+            pass_obj = SatPass(candidate_pass.sate_id, 
                                self._tle_db.get_name_from_id(candidate_pass.sate_id),
                                candidate_pass.aos,
                                candidate_pass.los,
@@ -114,18 +120,19 @@ async def pass_worker_w_script(work_item, finish_sem):
     finish_sem.release()
 
 
-async def pass_worker_w_file(work_item:SatPass, finish_sem, test_file, w_lock):
+async def pass_worker_w_file(work_item:SatPass, finish_sem:asyncio.Semaphore, ignore_list:list[int], test_file, w_lock):
 
     if not (work_item is None):
         sleep_t = work_item.aos.astimezone(tz=dt.timezone.utc) - dt.datetime.now(dt.timezone.utc) - LAUNCH_BEFORE_SECS
         sleep_t = sleep_t.total_seconds()
 
-        # print("Worker info: ")
-        # print("AOS (UTC): ", aos.astimezone(tz=dt.timezone.utc))
-        # print("deltaT: ", sleep_t)
-        # print("Freq: ", freq)
-        # print("CMD: ", cmdline)
-        # print("###\n\n")
+        # print("[" + str(dt.datetime.now()) + "] ")
+        # print("SAT: " + work_item.name + ", ")
+        # print("AOS (LOCAL): " + str(work_item.aos.astimezone()) + ", ")
+        # print("LOS (LOCAL): " + str(work_item.los.astimezone()) + ", ")
+        # print("f: " + str(work_item.freq) + " MHz, ")
+        # print("cmd: \"" + str(work_item.cmd) + "\" ")
+        # print("Will pass above us in 10 secs \r\n") 
 
         await asyncio.sleep(sleep_t)
 
@@ -139,6 +146,7 @@ async def pass_worker_w_file(work_item:SatPass, finish_sem, test_file, w_lock):
             test_file.write("Will pass above us in 10 secs \r\n")    
 
         finish_sem.release()
+        ignore_list.remove(work_item.id)
 
 
 tracker = Tracker()
