@@ -1,13 +1,16 @@
 from loader import SatLoader
 from util_types import SatPass
+from dateutil import relativedelta
 import datetime as dt
 import asyncio
 
 
-MAX_AWAITABLE_PASSES = 5
-LAUNCH_BEFORE_SECS = dt.timedelta(seconds=10)
-UPDATE_TLE_SECS = dt.timedelta(weeks=1)
-TEST_FILE="orbit_predictor.txt"
+MAX_AWAITABLE_PASSES =  5
+LAUNCH_BEFORE_SECS =    10
+LAUNCH_AFTER_SECS =     10
+UPDATE_TLE_SECS =       dt.timedelta(weeks=1)
+TEST_FILE =             "orbit_predictor.txt"
+DEBUG_CMD =             'test_script.sh'
 
 
 class Tracker:
@@ -26,42 +29,31 @@ class Tracker:
         self._tle_db = []
         self._predictor_db = []
 
-        sem_val = min(MAX_AWAITABLE_PASSES, len(self._tracked_list.keys()))
-        self._worker_sem = asyncio.BoundedSemaphore(value = sem_val)
-
         self.update_tle_srcs()
 
-    async def run_w_testfile(self) -> None:
+    async def run(self) -> None:
 
-        testfile = open(TEST_FILE, "at")
-        w_lock = asyncio.Lock()
+        worker_list = {}
 
-        earlier_pass_date_utc = dt.datetime.now(tz=dt.timezone.utc)
-        ignore_list = []
 
-        while (True) :
+        while (True):
 
-            if (not self._worker_sem.locked()):
-                #launch worker
-                await self._worker_sem.acquire()
-                next_pass = self.get_next_pass(earlier_pass_date_utc, ignore_list)
-                ignore_list.append(next_pass.id)
-                earlier_pass_date_utc = next_pass.aos
-                asyncio.create_task(pass_worker_w_file(next_pass, self._worker_sem, ignore_list, testfile, w_lock))
-                
+            earliest_pass = dt.datetime.now(tz=dt.timezone.utc)
+            pass_ignore = [int(x) for x in worker_list.keys()]
+            next_pass = self.get_next_pass(earliest_pass, pass_ignore)
+
+            if (next_pass is not None and len(worker_list) < MAX_AWAITABLE_PASSES):
+                worker_list[str(next_pass.id)] = asyncio.create_task(pass_worker(next_pass))
+
             else:
-                #wait for worker release or timeout to update TLE's DB
-                upd_timeout = self._last_update_time_utc + UPDATE_TLE_SECS - dt.datetime.now(tz=dt.timezone.utc)
-                try:
-                    #await and immediate release so as not to consume
-                    #the available slot for running another worker.
-                    await asyncio.wait_for(self._worker_sem.acquire(), timeout=upd_timeout.total_seconds())
-                    self._worker_sem.release()
-                except asyncio.exceptions.TimeoutError:
-                    #update TLE DB
+                done, pending = await asyncio.wait(worker_list.values(), return_when=asyncio.FIRST_COMPLETED)
+                
+                if (len(done) > 0):
+                    for key, value in list(worker_list.items()):
+                        if value in done:
+                            worker_list.pop(key)
+                else :
                     self.update_tle_srcs()
-                    testfile.write("[" + str(dt.datetime.now()) + "] ")
-                    testfile.write("Updated TLE Database! \r\n")
 
     def update_tle_srcs(self) -> None:
         
@@ -97,59 +89,58 @@ class Tracker:
                                self._tle_db.get_name_from_id(candidate_pass.sate_id),
                                candidate_pass.aos,
                                candidate_pass.los,
-                               self._tracked_list[candidate_pass.sate_id]["freq"],
                                self._tracked_list[candidate_pass.sate_id]["cmd"])
             return pass_obj
         
         return None
 
+class TrackerDebug(Tracker):
 
-async def pass_worker_w_script(work_item, finish_sem):
-    aos = work_item["aos"]
-    freq = work_item["freq"]
-    cmdline = work_item["cmd"]
-    name = work_item["name"]
-    sleep_t = aos.astimezone(tz=dt.timezone.utc) - dt.datetime.now(dt.timezone.utc) - LAUNCH_BEFORE_SECS
-    sleep_t = sleep_t.total_seconds()
+    def __init__(self) -> None:
+        super().__init__()
+
+    def __new__(cls):
+        return super().__new__(cls)
+    
+    def get_next_pass(self, when_utc: dt.datetime, ignore_list: list[int]) -> SatPass:
+        
+        if (len(ignore_list) == 0):
+            debugnum = 999999
+        else :
+            debugnum = int(ignore_list[-1]) - 1
+        
+        debugpass = SatPass(str(debugnum),
+                            'DEBUG_SAT',
+                            when_utc + relativedelta.relativedelta(seconds=20),
+                            when_utc + relativedelta.relativedelta(seconds=40),
+                            DEBUG_CMD)
+        return debugpass
+    
+    def run(self) -> any:
+        return super().run()
+
+
+async def pass_worker(satpass:SatPass):
+
+    aos = satpass.aos
+    los = satpass.los
+    cmdline = satpass.cmd
+    name = satpass.name
+    sleep_t = aos.astimezone(tz=dt.timezone.utc) - dt.datetime.now(dt.timezone.utc)
+    sleep_t = sleep_t.total_seconds() - LAUNCH_BEFORE_SECS
 
     await asyncio.sleep(sleep_t)
 
     proc = await asyncio.create_subprocess_exec(cmdline, str("SAT " + name + " will pass above us in " + str(LAUNCH_BEFORE_SECS) + " secs!\n"))
-    await proc.wait()
 
-    finish_sem.release()
+    sleep_t = los.astimezone(tz=dt.timezone.utc) - dt.datetime.now(dt.timezone.utc)
+    sleep_t = sleep_t.total_seconds() + LAUNCH_AFTER_SECS
 
+    await asyncio.sleep(sleep_t)
 
-async def pass_worker_w_file(work_item:SatPass, finish_sem:asyncio.Semaphore, ignore_list:list[int], test_file, w_lock):
+    await proc.terminate()
 
-    if not (work_item is None):
-        sleep_t = work_item.aos.astimezone(tz=dt.timezone.utc) - dt.datetime.now(dt.timezone.utc) - LAUNCH_BEFORE_SECS
-        sleep_t = sleep_t.total_seconds()
-
-        # print("[" + str(dt.datetime.now()) + "] ")
-        # print("SAT: " + work_item.name + ", ")
-        # print("AOS (LOCAL): " + str(work_item.aos.astimezone()) + ", ")
-        # print("LOS (LOCAL): " + str(work_item.los.astimezone()) + ", ")
-        # print("f: " + str(work_item.freq) + " MHz, ")
-        # print("cmd: \"" + str(work_item.cmd) + "\" ")
-        # print("Will pass above us in 10 secs \r\n") 
-
-        await asyncio.sleep(sleep_t)
-
-        async with w_lock:
-            test_file.write("[" + str(dt.datetime.now()) + "] ")
-            test_file.write("SAT: " + work_item.name + ", ")
-            test_file.write("AOS (LOCAL): " + str(work_item.aos) + ", ")
-            test_file.write("LOS (LOCAL): " + str(work_item.los) + ", ")
-            test_file.write("f: " + str(work_item.freq) + " MHz, ")
-            test_file.write("cmd: \"" + str(work_item.cmd) + "\" ")
-            test_file.write("Will pass above us in 10 secs \r\n")    
-
-        finish_sem.release()
-        ignore_list.remove(work_item.id)
-
-
-tracker = Tracker()
-asyncio.run(tracker.run_w_testfile())
+tracker = TrackerDebug()
+asyncio.run(tracker.run())
 
 

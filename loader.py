@@ -37,7 +37,6 @@ class CustomMemoryTLESource(TLESource):
 
     def _get_tle(self, sate_id, date):
         candidates = self.db[sate_id]['tles']
-        print(candidates)
         winner = None
         winner_dt = float("inf")
 
@@ -95,15 +94,10 @@ class SatLoader():
             if (sat.get('catnum', None) != None):
                 catnum = int(sat.get('catnum'))
                 if (catnum > 0 and catnum < 999999999 and not (catnum in self.__satlist.keys())):
-                    freq = float(sat.get('freq', 0))
-                    if (freq < 0):
-                        #habria que avisar de esto
-                        freq = abs(freq)
                     if (sat.get('script', None) != None):
                         script = os.path.abspath(sat['script'])
                         if (script != ""):
                             config_dict = {
-                                "freq":freq,
                                 "cmd":script,
                             }
                             self.__satlist[catnum] = config_dict
