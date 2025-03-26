@@ -179,3 +179,4 @@ pyrightconfig.json
 fetchs/
 cfg.json
 *.sh
+run.txt

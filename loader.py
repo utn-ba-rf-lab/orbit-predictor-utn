@@ -14,32 +14,34 @@ import json
 
 DEFAULT_CFG_FILENAME = 'cfg.json'
 
-## Una milanesa espacial (MILANESAT)
+## NOAA 19
 DEFAULT_CFG_OBJ = {'global-params':{'min-elev': 40, 'loc-lat':0, 'loc-long':0, 'loc-elev':0},
-                   'tracked-sats':[{'catnum':'42760',
-                                    'freq':'0.0',
+                   'tracked-sats':[{'catnum':'33591',
                                     'script':''}]
                     }
 MAX_BYTESIZE = 8192
 
 class CustomMemoryTLESource(TLESource):
+
     def __init__(self):
-        self.db = defaultdict(dict)
+        self.__db = defaultdict(dict)
 
     def add_tle(self, sate_id, tle, epoch, alias=None):
         if (alias != None):
-            self.db[sate_id]['alias'] = alias
-        elif (self.db[sate_id].get('alias', None) == None):  
-            self.db[sate_id]['alias'] = ""
+            self.__db[sate_id]['alias'] = alias
+        elif (self.__db[sate_id].get('alias', None) == None):  
+            self.__db[sate_id]['alias'] = ""
 
-        if (self.db[sate_id].get('tles', None) == None):
-            self.db[sate_id]['tles'] = set()
+        if (self.__db[sate_id].get('tles', None) == None):
+            self.__db[sate_id]['tles'] = set()
         
-        self.db[sate_id]['tles'].add((epoch, tle))
+        self.__db[sate_id]['tles'].add((epoch, tle))
 
     def _get_tle(self, sate_id, date):
-        candidates = self.db[sate_id]['tles']
-        print(candidates)
+        if (self.__db[sate_id].get('tles') is None):
+            raise LookupError(f'Missing tle data for CATID #{sate_id}, check configured sources.')
+        
+        candidates = self.__db[sate_id]['tles']
         winner = None
         winner_dt = float("inf")
 
@@ -50,29 +52,26 @@ class CustomMemoryTLESource(TLESource):
                 winner_dt = c_dt
 
         if winner is None:
-            raise LookupError("no tles in storage")
+            raise LookupError("No tles in storage")
 
         return winner
     
     def get_name_from_id(self, sate_id) -> str:
-        if (self.db.get(sate_id, None) != None):
-            return self.db[sate_id].get('alias', "")
+        if (self.__db.get(sate_id, None) != None):
+            return self.__db[sate_id].get('alias', "")
         return ""
 
 class SatTrackCfg():
-    def __init__(self, id:int, freq:float, script_path:str):
+
+    def __init__(self, id:int, script_path:str):
         self.__id = id
-        self.__freq = freq
         self.__script_path = script_path
 
     def get_id(self) -> int:
         return self.__id
     
-    def get_freq(self) -> float:
-        return self.__freq
-    
     def get_script(self) -> os.path:
-        return os.path.abspath(self.__script_path)
+        return os.path.abspath(os.path.expanduser(self.__script_path))
 
 class SatLoader():
     
@@ -82,7 +81,6 @@ class SatLoader():
         return cls.instance
     
     def __init__(self, cfgfile=''):
-
         self.__satlist = {}
 
         if (cfgfile != '' and os.path.isfile(os.path.abspath(cfgfile))):
@@ -107,24 +105,17 @@ class SatLoader():
             
 
     def __parse_satlist_from_json_arr(self, jsonarr):
-        
-        
         for sat in jsonarr:
             if (sat.get('catnum', None) != None):
                 catnum = int(sat.get('catnum'))
                 if (catnum > 0 and catnum < 999999999 and not (catnum in self.__satlist.keys())):
-                    freq = float(sat.get('freq', 0))
-                    if (freq < 0):
-                        #habria que avisar de esto
-                        freq = abs(freq)
                     if (sat.get('script', None) != None):
-                        script = os.path.abspath(sat['script'])
+                        script = sat['script']
                         if (script != ""):
-                            self.__satlist[catnum] = SatTrackCfg(catnum, freq, script)
+                            self.__satlist[catnum] = SatTrackCfg(catnum, script)
 
 
     def __parse_global_params_from_json_obj(self, jsonobj):
-        
         if (jsonobj == None):
             raise RuntimeError("Error! Corrupted cfg file")
 
