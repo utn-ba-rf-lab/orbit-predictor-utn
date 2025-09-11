@@ -8,7 +8,7 @@ import subprocess
 import logging
 
 # Configure logging to a file
-logging.basicConfig(filename='orbit_predictor_logger.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(filename='orbit_predictor_logger.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 logger = logging.getLogger(__name__)
 
@@ -28,16 +28,16 @@ def filter_overlapping_passes(passes, track_list):
         last = filtered[-1]
 
         # Chequear si se superponen
-        if p.aos < last.los:
+        if p.aos < last.los: # + dt.timedelta(hours=1):
             logger.info(f"[+] Colisión de pasadas encontrada: {p.sate_id} y {last.sate_id}")
             logger.debug(f"    Tiempo de arranque de {p.sate_id}: {p.aos}")
             logger.debug(f"    Tiempo de finalización de {last.sate_id}: {last.aos}")
             logger.debug(f"    Elevación y preferencia de {p.sate_id}: {p.max_elevation_deg} | {track_list[p.sate_id].get_priority()}")
             logger.debug(f"    Elevación y preferencia de {last.sate_id}: {last.max_elevation_deg} | {track_list[last.sate_id].get_priority()}")
-            # Hay superposición, elegimos el de mayor elevación
-            if p.max_elevation_deg > last.max_elevation_deg or (
-                track_list[p.sate_id].get_priority() > track_list[last.sate_id].get_priority()
-            ):
+            # Hay superposición, elegimos el de mayor prioridad primero, y si empatan, el de mayor elevación
+            if (track_list[p.sate_id].get_priority() > track_list[last.sate_id].get_priority() or
+                (p.max_elevation_deg > last.max_elevation_deg and
+                track_list[p.sate_id].get_priority() == track_list[last.sate_id].get_priority())):
                 logger.info(f"    Se prefiere al satélite: {p.sate_id}")
                 filtered[-1] = p  # reemplazamos al último
             # si no, simplemente descartamos este
@@ -49,8 +49,11 @@ def filter_overlapping_passes(passes, track_list):
 
 def pass_worker(name:str, aos:dt.datetime, cmd_line:str) -> subprocess.CompletedProcess:
     sleep_t = aos.astimezone(tz=dt.timezone.utc) - dt.datetime.now(dt.timezone.utc) - LAUNCH_BEFORE_SECS
-    sleep_t = sleep_t.total_seconds()    
+    sleep_t = sleep_t.total_seconds()
     time.sleep(sleep_t)
+    # time.sleep(10)
+    # logger.debug(f"{sleep_t} segundos más tarde: ")
+    
     ret_code = subprocess.run(args=[cmd_line])
     return ret_code
 
