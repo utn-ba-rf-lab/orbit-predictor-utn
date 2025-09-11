@@ -50,9 +50,7 @@ def filter_overlapping_passes(passes, track_list):
 def pass_worker(name:str, aos:dt.datetime, cmd_line:str) -> subprocess.CompletedProcess:
     sleep_t = aos.astimezone(tz=dt.timezone.utc) - dt.datetime.now(dt.timezone.utc) - LAUNCH_BEFORE_SECS
     sleep_t = sleep_t.total_seconds()    
-    # time.sleep(sleep_t)
-    time.sleep(10)
-    logger.debug(f"{sleep_t} segundos más tarde: ")
+    time.sleep(sleep_t)
     ret_code = subprocess.run(args=[cmd_line])
     return ret_code
 
