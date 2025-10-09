@@ -17,7 +17,8 @@ DEFAULT_CFG_FILENAME = 'cfg.json'
 ## NOAA 19
 DEFAULT_CFG_OBJ = {'global-params':{'min-elev': 40, 'loc-lat':0, 'loc-long':0, 'loc-elev':0},
                    'tracked-sats':[{'catnum':'33591',
-                                    'script':''}]
+                                    'script':'',
+                                    'priority':'0'}]
                     }
 MAX_BYTESIZE = 8192
 
@@ -63,15 +64,19 @@ class CustomMemoryTLESource(TLESource):
 
 class SatTrackCfg():
 
-    def __init__(self, id:int, script_path:str):
+    def __init__(self, id:int, script_path:str, priority:int):
         self.__id = id
         self.__script_path = script_path
+        self.__priority = priority
 
     def get_id(self) -> int:
         return self.__id
     
     def get_script(self) -> os.path:
         return os.path.abspath(os.path.expanduser(self.__script_path))
+    
+    def get_priority(self) -> int:
+        return self.__priority
 
 class SatLoader():
     
@@ -106,13 +111,20 @@ class SatLoader():
 
     def __parse_satlist_from_json_arr(self, jsonarr):
         for sat in jsonarr:
-            if (sat.get('catnum', None) != None):
-                catnum = int(sat.get('catnum'))
-                if (catnum > 0 and catnum < 999999999 and not (catnum in self.__satlist.keys())):
-                    if (sat.get('script', None) != None):
-                        script = sat['script']
-                        if (script != ""):
-                            self.__satlist[catnum] = SatTrackCfg(catnum, script)
+            if (sat.get('catnum', None) == None): print(f"[Error] Satélite sin número de catalogo."); continue
+            catnum = int(sat.get('catnum'))
+            if (catnum < 0 or catnum > 999999999): print(f"[Error] Número de catalogo erroneo: {catnum}"); continue
+            if (catnum in self.__satlist.keys()): print(f"[Error] Número de catalogo repetido: {catnum}"); continue
+
+            if (sat.get('script', None) == None): print(f"[Error] Satélite sin script asociado."); continue
+            script = sat['script']
+            if (script == ""): print(f"[Error] Script de satélite vacío."); continue
+
+            if (sat.get('priority', None) == None): print(f"[Error] Satélite sin número de prioridad."); continue
+            priority = int(sat.get('priority'))
+            if (priority < 0): print(f"[Error] Número de prioridad negativo para satélite: {catnum}"); continue
+            
+            self.__satlist[catnum] = SatTrackCfg(catnum, script, priority)
 
 
     def __parse_global_params_from_json_obj(self, jsonobj):
