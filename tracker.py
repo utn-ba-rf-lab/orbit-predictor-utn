@@ -6,9 +6,10 @@ import time
 import concurrent.futures
 import subprocess
 import logging
+import sys
 
-# Configure logging to a file
-logging.basicConfig(filename='orbit_predictor_logger.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Configurar el logger para que escriba a stdout (al journalctl).
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,10 @@ async def pass_worker_async(p, track):
     stdout, stderr = await proc.communicate()
 
     logger.info(f"[+] Finalizó {p.sate_id} con código de retorno: {proc.returncode}")
+    if stdout:
+        logger.info(f"    STDOUT:\n{stdout}")
+    if stderr:
+        logger.error(f"    STDERR:\n{stderr}")
 
 def pass_worker(name:str, aos:dt.datetime, los:dt.datetime, cmd_line:str) -> subprocess.CompletedProcess:
     sleep_t = aos.astimezone(tz=dt.timezone.utc) - dt.datetime.now(dt.timezone.utc) - LAUNCH_BEFORE_SECS
@@ -93,6 +98,7 @@ def pass_worker(name:str, aos:dt.datetime, los:dt.datetime, cmd_line:str) -> sub
     return resultado
 
 async def main() -> None:
+    logger.info(f"[*] Inicializando componentes del orbit-predictor.")
     # Carga el SatLoader del paquete.
     loader = SatLoader()
     # Consigue la lista de satélites a observar.
@@ -102,6 +108,7 @@ async def main() -> None:
     # Consigue la ubicación actual de la configuración.
     loc = loader.get_location()
 
+    logger.info(f"[*] Cargando satélites del cfg.json.")
     pred_db = []
 
     # Por cada satélite observado, se consigue su predictór de la base de datos.
@@ -130,8 +137,8 @@ async def main() -> None:
                 satpass = p.get_next_pass(loc, max_elevation_gt=loader.min_elev, when_utc=next_pass_date)
                 if satpass is not None:
                     logger.info(f"[+] Próxima pasada encontrada: {satpass.sate_id}")
-                    logger.info(f"    AOS: {satpass.aos.astimezone(tz=dt.timezone.utc)}")
-                    logger.info(f"    LOS: {satpass.los.astimezone(tz=dt.timezone.utc)}")
+                    logger.info(f"    AOS: {satpass.aos.astimezone(tz=dt.timezone(dt.timedelta(hours=-3)))}")
+                    logger.info(f"    LOS: {satpass.los.astimezone(tz=dt.timezone(dt.timedelta(hours=-3)))}")
                     logger.info(f"    Elevación máxima: {satpass.max_elevation_deg:.1f}°")
                     logger.info("-" * 50)
                     candidates.append(satpass)
