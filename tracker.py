@@ -9,7 +9,7 @@ import logging
 import sys
 
 # Configurar el logger para que escriba a stdout (al journalctl).
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 
 logger = logging.getLogger(__name__)
 
@@ -73,9 +73,9 @@ async def pass_worker_async(p, track):
 
     logger.info(f"[+] Finalizó {p.sate_id} con código de retorno: {proc.returncode}")
     if stdout:
-        logger.info(f"    STDOUT:\n{stdout}")
+        logger.info(f"    STDOUT:\n{stdout.decode('UTF-8')}")
     if stderr:
-        logger.error(f"    STDERR:\n{stderr}")
+        logger.error(f"    STDERR:\n{stderr.decode('UTF-8')}")
 
 def pass_worker(name:str, aos:dt.datetime, los:dt.datetime, cmd_line:str) -> subprocess.CompletedProcess:
     sleep_t = aos.astimezone(tz=dt.timezone.utc) - dt.datetime.now(dt.timezone.utc) - LAUNCH_BEFORE_SECS
