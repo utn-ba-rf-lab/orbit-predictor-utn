@@ -7,6 +7,7 @@ import concurrent.futures
 import subprocess
 import logging
 import sys
+from custom_classes import CustomPredictor, CustomOverpass
 
 # Configurar el logger para que escriba a stdout (al journalctl).
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
@@ -16,9 +17,13 @@ logger = logging.getLogger(__name__)
 MAX_AWAITABLE_PASSES = 5
 LAUNCH_BEFORE_SECS = dt.timedelta(seconds=10)
 
+
+def sorted_by_aos(_list):
+    return sorted(_list, key=lambda p: p.aos)
+
 def filter_overlapping_passes(passes, track_list):
     # Ordenamos por AOS
-    passes = sorted(passes, key=lambda p: p.aos)
+    passes = sorted_by_aos(passes)
 
     filtered = []
     for p in passes:
@@ -29,20 +34,27 @@ def filter_overlapping_passes(passes, track_list):
         last = filtered[-1]
 
         # Chequear si se superponen
-        if p.aos < last.los: # + dt.timedelta(hours=1):
-            logger.info(f"[+] Colisión de pasadas encontrada: {p.sate_id} y {last.sate_id}")
-            logger.debug(f"    Tiempo de arranque de {p.sate_id}: {p.aos}")
-            logger.debug(f"    Tiempo de finalización de {last.sate_id}: {last.los}")
-            logger.debug(f"    Elevación y preferencia de {p.sate_id}: {p.max_elevation_deg} | {track_list[p.sate_id].get_priority()}")
-            logger.debug(f"    Elevación y preferencia de {last.sate_id}: {last.max_elevation_deg} | {track_list[last.sate_id].get_priority()}")
-            # Hay superposición, elegimos el de mayor prioridad primero, y si empatan, el de mayor elevación
-            if (track_list[p.sate_id].get_priority() > track_list[last.sate_id].get_priority() or
-                (p.max_elevation_deg > last.max_elevation_deg and
-                track_list[p.sate_id].get_priority() == track_list[last.sate_id].get_priority())):
-                logger.info(f"    Se prefiere al satélite: {p.sate_id}")
-                filtered[-1] = p  # reemplazamos al último
-            # si no, simplemente descartamos este
-            else: logger.info(f"    Se prefiere al satélite: {last.sate_id}")
+        if p.aos < last.los:
+            # Chequear si la pasada que actualmente está en la lista todavia no comenzo (evita cancelar tareas que ya comenzaron, no solo por la cancelación del worker, sino también por el uso de la antena)
+            # Solo se verifican solapamientos si la pasada que ya está agendada todavía no comenzo o no está a punto de comenzar
+            if (last.aos - (1.5 * LAUNCH_BEFORE_SECS ))>dt.datetime.now(dt.timezone.utc):
+                logger.info(f"[+] Colisión de pasadas encontrada: {p.sate_id} y {last.sate_id}")
+                logger.debug(f"    Tiempo de arranque de {p.sate_id}: {p.aos}")
+                logger.debug(f"    Tiempo de finalización de {last.sate_id}: {last.los}")
+                logger.debug(f"    Elevación y preferencia de {p.sate_id}: {p.max_elevation_deg} | {track_list[p.sate_id].get_priority()}")
+                logger.debug(f"    Elevación y preferencia de {last.sate_id}: {last.max_elevation_deg} | {track_list[last.sate_id].get_priority()}")
+                # Hay superposición, elegimos el de mayor prioridad primero, y si empatan, el de mayor elevación
+                if (track_list[p.sate_id].get_priority() > track_list[last.sate_id].get_priority() or
+                    (p.max_elevation_deg > last.max_elevation_deg and
+                    track_list[p.sate_id].get_priority() == track_list[last.sate_id].get_priority())):
+                    logger.info(f"    Se prefiere al satélite: {p.sate_id}")
+
+                    p.prefer_over(last)
+                    filtered[-1] = p  # reemplazamos al último
+                # si no, simplemente descartamos este
+                else: 
+                    logger.info(f"    Se prefiere al satélite: {last.sate_id}")
+                    last.prefer_over(p)
         else:
             filtered.append(p)
 
@@ -58,7 +70,7 @@ async def pass_worker_async(p, track):
         "--priority", str(track.get_priority()),
         "--aos", p.aos.isoformat(),
         "--los", p.los.isoformat(),
-        "--max-elev", str(p.max_elevation_deg)
+        "--max-elev", str(p.max_elevation_deg),
     ]
 
     logger.info(f"[+] Ejecutando {p.sate_id}: {' '.join(cmd)}")
@@ -80,6 +92,7 @@ async def pass_worker_async(p, track):
 def pass_worker(name:str, aos:dt.datetime, los:dt.datetime, cmd_line:str) -> subprocess.CompletedProcess:
     sleep_t = aos.astimezone(tz=dt.timezone.utc) - dt.datetime.now(dt.timezone.utc) - LAUNCH_BEFORE_SECS
     sleep_t = max(0, sleep_t.total_seconds())
+    # cambiar el retraso
     time.sleep(sleep_t)
 
     logger.info(f"[+] Ejecutando script para satélite {name}")
@@ -114,11 +127,14 @@ async def main() -> None:
     # Por cada satélite observado, se consigue su predictór de la base de datos.
     for t_sat in track_list.values():
         p = tles.get_predictor(t_sat.get_id())
-        pred_db.append(p)
+        #Al conseguir el predictor, se lo envuelve en la clase propia CustomPredictor
+        custom_p=CustomPredictor(p)    
+        pred_db.append(custom_p)
 
     task_list: list[asyncio.Task] = []
-
-    next_pass_date = 0
+    filtered_passes = []
+    recovered_passes = []
+    task_to_pass_map= {}
 
     # Comienza el loop infinito.
     while True:
@@ -126,54 +142,77 @@ async def main() -> None:
         while (len(task_list) < MAX_AWAITABLE_PASSES):
             current_earlier_pass = None
             
-            # Si no hay tareas, calcular la próxima pasada desde ahora.
-            if (len(task_list) == 0):
-                next_pass_date = dt.datetime.now(tz=dt.timezone.utc)
-
             candidates = []
 
-            # En cada predictór, nos fijamos la próxima pasada, pasamos su AOS a UTC-3.
+            # En cada predictor, nos fijamos la próxima pasada, pasamos su AOS a UTC-3.
             for p in pred_db:
-                satpass = p.get_next_pass(loc, max_elevation_gt=loader.min_elev, when_utc=next_pass_date)
+                satpass = p.get_next_pass(loc, max_elevation_gt=loader.min_elev, when_utc=p.custom_next_pass_date)
                 if satpass is not None:
+                    #Al conseguir la pasada, se la envuelve en la clase propia CustomOverpass
+                    satpass=CustomOverpass(satpass, p)
+                    
                     logger.info(f"[+] Próxima pasada encontrada: {satpass.sate_id}")
                     logger.info(f"    AOS: {satpass.aos.astimezone(tz=dt.timezone(dt.timedelta(hours=-3)))}")
                     logger.info(f"    LOS: {satpass.los.astimezone(tz=dt.timezone(dt.timedelta(hours=-3)))}")
                     logger.info(f"    Elevación máxima: {satpass.max_elevation_deg:.1f}°")
                     logger.info("-" * 50)
+
                     candidates.append(satpass)
 
+            candidates = sorted_by_aos(candidates)
+            #La pasada tiene referenciado el predictor del satélite. Se actualiza el punto de busqueda del predictor con el LOS de la pasada que se va a considerar.
+            candidates[0].handle_candidate_pass()
+            
             # Filtramos para evitar solapamientos
-            filtered_passes = filter_overlapping_passes(candidates, track_list)
-
-            # Actualizar punto de búsqueda
-            next_pass_date = max(
-                p.los.astimezone(dt.timezone.utc)
-                for p in filtered_passes
-            )
+            filtered_passes = filter_overlapping_passes(candidates[:1]+filtered_passes+recovered_passes, track_list)
+            recovered_passes=[]
 
             # Si se encontraron pasadas se calcula el tiempo de ejecución y se prepara un worker para ejecutar un script en la pasada.
             for p in filtered_passes:
-                track = track_list[p.sate_id]
+                # Se verifica que la pasada no tenga un worker ya creado
+                if p.task == None :
+                    
+                    track = track_list[p.sate_id]
 
-                logger.info(f"[+] Planificando ejecución: {p.sate_id}")
-                logger.info(f"    Script: {track.get_script()}")
-                logger.info(f"    Prioridad: {track.get_priority()}")
+                    logger.info(f"[+] Planificando ejecución: {p.sate_id}")
+                    logger.info(f"    Script: {track.get_script()}")
+                    logger.info(f"    Prioridad: {track.get_priority()}")
+                    logger.info(f"    Pasadas Eliminadas: {len(p.overlapped_passes)}")
+                    logger.info("-" * 50)
 
-                task = asyncio.create_task(
-                    pass_worker_async(p, track)
-                )
+                    task = asyncio.create_task(
+                        pass_worker_async(p, track)
+                    )
 
-                task_list.append(task)
-                
+                    p.task = task
+                    task_to_pass_map[task]=p
+                    task_list.append(task)
+
+
         done, pending = await asyncio.wait(task_list, return_when=asyncio.FIRST_COMPLETED)
         for task in done:
+            sat_p=task_to_pass_map.get(task)
             try:
                 await task
+            except asyncio.CancelledError:
+                logger.info(f"[-] Pasada de Satélite {sat_p.sate_id if sat_p else 'unknown'} AOS {sat_p.aos.astimezone(tz=dt.timezone(dt.timedelta(hours=-3)))} cancelada por overlapping.")
+
+                # Recuperar las pasadas descartadas debido a la pasada que se acaba de cancelar
+                if sat_p.overlapped_passes:
+                    logger.info(f"[-] Pasadas recuperadas debido a la cancelación de {sat_p.sate_id if sat_p else 'unknown'}:")
+                    
+                    for recovered_p in sat_p.overlapped_passes:
+                        if recovered_p not in filtered_passes:
+                            recovered_passes.append(recovered_p)
+                            logger.info(f"    Pasada recuperada {recovered_p.sate_id if sat_p else 'unknown'} AOS {sat_p.aos.astimezone(tz=dt.timezone(dt.timedelta(hours=-3)))}")
+
             except Exception as e:
                 logger.exception(f"[x] Error en tarea: {e}")
             finally:
-                task_list.remove(task)
+                if task in task_list: task_list.remove(task)
+                if task in task_to_pass_map: del task_to_pass_map[task]
+                if sat_p and sat_p in filtered_passes: filtered_passes.remove(sat_p)
         
 if (__name__ == '__main__'):
     asyncio.run(main(), debug=True)
+
