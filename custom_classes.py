@@ -4,7 +4,6 @@ import datetime as dt
 class CustomPredictor():
     def __init__(self, predictor):
         self._predictor = predictor
-        print(type(predictor))
         self._custom_next_pass_date = dt.datetime.now(tz=dt.timezone.utc)
 
     def __getattr__(self, attr_name):
@@ -20,6 +19,14 @@ class CustomPredictor():
     @custom_next_pass_date.setter
     def custom_next_pass_date(self, value):
         self._custom_next_pass_date = value
+    
+    @property
+    def predictor(self):
+        return self._predictor
+    
+    @predictor.setter
+    def predictor(self, value):
+        self._predictor = value
 
 
 class CustomOverpass():
@@ -66,13 +73,10 @@ class CustomOverpass():
         # Se devulve una copia de la lista 
         return self._overlapped_passes[:]
 
-    @property
-    def task(self):
-        return self._task
-    
-    @task.setter
-    def task(self, value):
-        self._task = value
+    def recover_overlapped_passes(self):
+        rec_list=self.overlapped_passes
+        self._overlapped_passes = []
+        return rec_list
 
     @property
     def task(self):
@@ -85,7 +89,4 @@ class CustomOverpass():
     @property
     def predictor(self):
         return self._predictor
-    
-    @predictor.setter
-    def predictor(self, value):
-        self._predictor = value
+

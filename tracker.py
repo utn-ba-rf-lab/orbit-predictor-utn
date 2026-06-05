@@ -201,7 +201,7 @@ async def main() -> None:
                 if sat_p.overlapped_passes:
                     logger.info(f"[-] Pasadas recuperadas debido a la cancelación de {sat_p.sate_id if sat_p else 'unknown'}:")
                     
-                    for recovered_p in sat_p.overlapped_passes:
+                    for recovered_p in sat_p.recover_overlapped_passes():
                         if recovered_p not in filtered_passes:
                             recovered_passes.append(recovered_p)
                             logger.info(f"    Pasada recuperada {recovered_p.sate_id if sat_p else 'unknown'} AOS {sat_p.aos.astimezone(tz=dt.timezone(dt.timedelta(hours=-3)))}")
