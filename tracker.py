@@ -62,9 +62,6 @@ def filter_overlapping_passes(passes, track_list):
 
 async def pass_worker_async(p, track):
     delay = (p.aos - dt.datetime.now(dt.timezone.utc) - LAUNCH_BEFORE_SECS).total_seconds()
-    delay = delay/1000
-    while delay>20:
-        delay = delay/3
     await asyncio.sleep(max(0, delay))
 
     cmd = [
