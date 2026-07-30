@@ -55,6 +55,7 @@ def filter_overlapping_passes(passes, track_list):
                 else: 
                     logger.info(f"    Se prefiere al satélite: {last.sate_id}")
                     last.prefer_over(p)
+                logger.info("-" * 50)
         else:
             filtered.append(p)
 
@@ -88,6 +89,7 @@ async def pass_worker_async(p, track):
         logger.info(f"    STDOUT:\n{stdout.decode('UTF-8')}")
     if stderr:
         logger.error(f"    STDERR:\n{stderr.decode('UTF-8')}")
+    logger.info("-" * 50)
 
 def pass_worker(name:str, aos:dt.datetime, los:dt.datetime, cmd_line:str) -> subprocess.CompletedProcess:
     sleep_t = aos.astimezone(tz=dt.timezone.utc) - dt.datetime.now(dt.timezone.utc) - LAUNCH_BEFORE_SECS
@@ -151,10 +153,12 @@ async def main() -> None:
                     #Al conseguir la pasada, se la envuelve en la clase propia CustomOverpass
                     satpass=CustomOverpass(satpass, p)
                     
-                    logger.info(f"[+] Próxima pasada encontrada: {satpass.sate_id}")
-                    logger.info(f"    AOS: {satpass.aos.astimezone(tz=dt.timezone(dt.timedelta(hours=-3)))}")
-                    logger.info(f"    LOS: {satpass.los.astimezone(tz=dt.timezone(dt.timedelta(hours=-3)))}")
-                    logger.info(f"    Elevación máxima: {satpass.max_elevation_deg:.1f}°")
+                    logger.info(
+                        f"[+] Próxima pasada encontrada: {satpass.sate_id} | "
+                        f"AOS: {satpass.aos.astimezone(tz=dt.timezone(dt.timedelta(hours=-3))).strftime("%Y-%m-%d %H:%M:%S")} | "
+                        f"LOS: {satpass.los.astimezone(tz=dt.timezone(dt.timedelta(hours=-3))).strftime("%Y-%m-%d %H:%M:%S")} | "
+                        f"Elevación máxima: {satpass.max_elevation_deg:.1f}°"
+                                )
                     logger.info("-" * 50)
 
                     candidates.append(satpass)
@@ -174,10 +178,12 @@ async def main() -> None:
                     
                     track = track_list[p.sate_id]
 
-                    logger.info(f"[+] Planificando ejecución: {p.sate_id}")
-                    logger.info(f"    Script: {track.get_script()}")
-                    logger.info(f"    Prioridad: {track.get_priority()}")
-                    logger.info(f"    Pasadas Eliminadas: {len(p.overlapped_passes)}")
+                    logger.info(
+                        f"[+] Planificando ejecución: {p.sate_id} | "
+                        f"Script: {track.get_script()} | "
+                        f"Prioridad: {track.get_priority()} | "
+                        f"Pasadas Eliminadas: {len(p.overlapped_passes)}"
+                                )
                     logger.info("-" * 50)
 
                     task = asyncio.create_task(
