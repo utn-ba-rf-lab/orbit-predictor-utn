@@ -138,6 +138,7 @@ async def main() -> None:
     recovered_passes = []
     task_to_pass_map= {}
 
+    logger.info("-" * 50)
     # Comienza el loop infinito.
     while True:
         # Mientras la lista tenga espacio disponible.
@@ -158,10 +159,11 @@ async def main() -> None:
                         f"AOS: {satpass.aos.astimezone(tz=dt.timezone(dt.timedelta(hours=-3))).strftime("%Y-%m-%d %H:%M:%S")} | "
                         f"LOS: {satpass.los.astimezone(tz=dt.timezone(dt.timedelta(hours=-3))).strftime("%Y-%m-%d %H:%M:%S")} | "
                         f"Elevación máxima: {satpass.max_elevation_deg:.1f}°"
-                                )
-                    logger.info("-" * 50)
+                    )
 
                     candidates.append(satpass)
+
+            logger.info("-" * 50)
 
             candidates = sorted_by_aos(candidates)
             #La pasada tiene referenciado el predictor del satélite. Se actualiza el punto de busqueda del predictor con el LOS de la pasada que se va a considerar.
@@ -183,7 +185,7 @@ async def main() -> None:
                         f"Script: {track.get_script()} | "
                         f"Prioridad: {track.get_priority()} | "
                         f"Pasadas Eliminadas: {len(p.overlapped_passes)}"
-                                )
+                    )
                     logger.info("-" * 50)
 
                     task = asyncio.create_task(
