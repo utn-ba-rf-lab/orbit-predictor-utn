@@ -71,6 +71,7 @@ async def pass_worker_async(p, track):
         "--aos", p.aos.isoformat(),
         "--los", p.los.isoformat(),
         "--max-elev", str(p.max_elevation_deg),
+        "--orbit-number", str(p.orbit_number),
     ]
 
     logger.info(f"[+] Ejecutando {p.sate_id}: {' '.join(cmd)}")
@@ -147,6 +148,7 @@ async def main() -> None:
             # En cada predictor, nos fijamos la próxima pasada, pasamos su AOS a UTC-3.
             for p in pred_db:
                 satpass = p.get_next_pass(loc, max_elevation_gt=loader.min_elev, when_utc=p.custom_next_pass_date)
+                
                 if satpass is not None:
                     #Al conseguir la pasada, se la envuelve en la clase propia CustomOverpass
                     satpass=CustomOverpass(satpass, p)

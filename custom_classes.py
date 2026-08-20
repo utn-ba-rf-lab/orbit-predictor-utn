@@ -1,5 +1,5 @@
 import datetime as dt
-
+import math
 
 class CustomPredictor():
     def __init__(self, predictor):
@@ -28,6 +28,35 @@ class CustomPredictor():
     def predictor(self, value):
         self._predictor = value
 
+    def orbit_number_at(self, aos_overpass):
+        """
+        Calcula el número de órbita en el instante dado (AOS).
+        Usa el rev_number del TLE y el período orbital.
+        
+        Args:
+            aos_overpass (datetime): Momento del AOS en UTC.
+
+        Returns:
+            int: Número de órbita correspondiente al instante.
+        """
+
+        #Período del satélite en minutos
+        _orbit_period = 2*math.pi /self._predictor.mean_motion      
+
+        #A partir de la segunda línea del tle se consigue el número de orbita (número de revolución) en la época del TLE 
+        _rev_number_tle =int(self._predictor.tle.lines[1][63:68])   # columnas 64–68
+        
+        #Momento en el que fue generado el TLE
+        _epoch_tle = self._predictor.tle.date.replace(tzinfo=dt.timezone.utc)
+
+        _delta_minutes = (aos_overpass - _epoch_tle).total_seconds() / 60
+
+        _orbits_since_epoch = math.floor(_delta_minutes / _orbit_period)
+
+        _orbit_number = _rev_number_tle + _orbits_since_epoch
+
+        return _orbit_number
+
 
 class CustomOverpass():
     def __init__(self, pasada, predictor):
@@ -35,6 +64,7 @@ class CustomOverpass():
         self._predictor = predictor
         self._task = None      
         self._overlapped_passes=[]
+        self._orbit_number = self._predictor.orbit_number_at(self._overpass.aos)
         
 
     def __getattr__(self, attr_name):
@@ -90,3 +120,6 @@ class CustomOverpass():
     def predictor(self):
         return self._predictor
 
+    @property
+    def orbit_number(self):
+        return self._orbit_number
