@@ -158,19 +158,19 @@ class SatLoader():
 
         lat = jsonobj.get('loc-lat', None)
         if (lat == None): 
-            logger.error(f'[E] No se cargó la latitud del lugar.'); continue
+            logger.error(f'[E] No se cargó la latitud del lugar.')
  
         long = jsonobj.get('loc-long', None)
         if (long == None): 
-            logger.error(f'[E] No se cargó la longitud del lugar.'); continue
+            logger.error(f'[E] No se cargó la longitud del lugar.')
  
         elev = jsonobj.get('loc-elev', None)
         if (elev == None): 
-            logger.error(f'[E] No se cargó la elevación del lugar.'); continue
+            logger.error(f'[E] No se cargó la elevación del lugar.')
  
         min_elev = jsonobj.get('min-elev', None)
         if (min_elev == None): 
-            logger.error(f'[E] No se cargó la elevación mínima esperada.'); continue
+            logger.error(f'[E] No se cargó la elevación mínima esperada.')
         
         if (None in [lat, long, elev, min_elev]):
             logger.error(f'[E] No se encontraron campos necesarios para la ejecución del programa.')
