@@ -190,9 +190,13 @@ class SatLoader():
         for file in sources:
             logger.debug(f'[d] Cargando archivo {file}')
             parsed = omm.parse_xml(file)
-            fields = next(parsed, "")
-            while (fields != ""):
-                logger.debug(f'[d] Se leyó el registro: {fields}')
+            for count, fields in enumerate(parsed):
+#            fields = next(parsed, "")
+#            while (fields != ""):
+                if count < 25: 
+                    logger.debug(f'[d] Se leyó el registro: {fields}')
+                elif count == 25:
+                    logger.debug(f'[d] Se leyeron los primeros 25 registros, quedan registros a leer que no se van a imprimir.') 
                 sat = Satrec()
                 omm.initialize(sat, fields)
                 db.add_tle(
@@ -201,7 +205,8 @@ class SatLoader():
                     datetime_from_jday(sat.jdsatepoch, sat.jdsatepochF), 
                     fields.get('OBJECT_NAME', None)
                 )
-                fields = next(parsed, "")
+#                fields = next(parsed, "")
+            logger.debug(f'[d] Se leyeron {count} registros, de los que se imprimieron en pantalla los primeros {count - 25}.')
         
         self.__tle_src_db = db
 
