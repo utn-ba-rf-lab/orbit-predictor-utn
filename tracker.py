@@ -14,7 +14,21 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--dev", action="store_true", dest="DEV", help="Ejecutar en modo desarrollo - Reduce el Delay entre pasadas")
 parser.add_argument("--debug", action="store_true", dest="DEBUG", help="Mostrar información detallada de depuración en los logs")
+parser.add_argument("--passes-outfile", default="passes_outfile.json", dest="PASSES_OUTFILE", metavar=("FILENAME"), help="Ruta del archivo JSON donde se exportarán las pasadas programadas (default: passes_outfile.json)")
+parser.add_argument("--api", nargs="+", dest="API", metavar=("PORT", "HOST"), help="Configura la API con puerto obligatorio (primer argumento) y host opcional (segundo argumento, default: localhost)")
+
 ARGS = parser.parse_args()
+
+#Verificar argumentos para --api
+if ARGS.API:
+    if len(ARGS.API) > 2:
+        parser.error("--api acepta solo 2 argumentos: puerto obligatorio y host opcional")
+
+    # Normalizar la lista para que siempre tenga [port, host]
+    port = int(ARGS.API[0])
+    host = ARGS.API[1] if len(ARGS.API) > 1 else "localhost"
+    ARGS.API = [port, host]
+
 
 # Configurar el logger para que escriba a stdout (al journalctl) según el modo (Level INFO por defecto)
 if ARGS.DEBUG:
