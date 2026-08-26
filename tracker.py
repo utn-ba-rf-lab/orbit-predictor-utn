@@ -14,8 +14,8 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--dev", action="store_true", dest="DEV", help="Ejecutar en modo desarrollo - Reduce el Delay entre pasadas")
 parser.add_argument("--debug", action="store_true", dest="DEBUG", help="Mostrar información detallada de depuración en los logs")
-parser.add_argument("--passes-outfile", default="passes_outfile.json", dest="PASSES_OUTFILE", metavar=("FILENAME"), help="Ruta del archivo JSON donde se exportarán las pasadas programadas (default: passes_outfile.json)")
-parser.add_argument("--api", nargs="+", dest="API", metavar=("PORT", "HOST"), help="Configura la API con puerto obligatorio (primer argumento) y host opcional (segundo argumento, default: localhost)")
+parser.add_argument("--passes-outfile", nargs="?", const="passes_outfile.json", default = None, dest="PASSES_OUTFILE", metavar="FILENAME", help="Activa la exportación de las pasadas programadas. Si se pasa sin valor, por default: passes_outfile.json; sin flag, no se exporta.")
+parser.add_argument("--api", nargs="+", dest="API", metavar=("PORT", "HOST"), help="Levanta y configura la API con puerto obligatorio (primer argumento) y host opcional (segundo argumento, default: localhost). Sin flag, no se expone la api.")
 
 ARGS = parser.parse_args()
 
