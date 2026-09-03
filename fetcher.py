@@ -12,7 +12,7 @@ DEFAULT_SRC_FILENAME = 'tlesrc.json'
 MAX_BYTESIZE = 8192
 DEFAULT_SRC_OBJ = [{'name':'NOAA', 
                    'url':'https://celestrak.org/NORAD/elements/gp.php?GROUP=noaa&FORMAT=xml'}]
-TIME_BETWEEN_UPDATES = timedelta(seconds=5)
+TIME_BETWEEN_UPDATES = timedelta(weeks=1)
 
 class SatTLEFetcher():
 
@@ -116,3 +116,15 @@ class SatTLEFetcher():
         
         return srcfiles
 
+    def get_oldest_timestamp(self) -> Datetime:
+        now = datetime.now()
+        oldest = now
+        for src in self.__srcdb:
+            timestamp = datetime.fromtimestamp(src.get('timestamp'))
+            if timestamp == None:
+                continue
+            if timestamp < oldest:
+                oldest = timestamp
+        if oldest == now:
+            oldest = 0
+        return oldest

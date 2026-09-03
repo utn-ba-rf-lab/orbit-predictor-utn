@@ -191,8 +191,6 @@ class SatLoader():
             logger.debug(f'[d] Cargando archivo {file}')
             parsed = omm.parse_xml(file)
             for count, fields in enumerate(parsed):
-#            fields = next(parsed, "")
-#            while (fields != ""):
                 if count < 25: 
                     logger.debug(f'[d] Se leyó el registro: {fields}')
                 elif count == 25:
@@ -205,10 +203,12 @@ class SatLoader():
                     datetime_from_jday(sat.jdsatepoch, sat.jdsatepochF), 
                     fields.get('OBJECT_NAME', None)
                 )
-#                fields = next(parsed, "")
-            logger.debug(f'[d] Se leyeron {count} registros, de los que se imprimieron en pantalla los primeros {count - 25}.')
+            logger.debug(f'[d] Se leyeron {count} registros, de los que se imprimieron en pantalla los primeros 25.')
         
         self.__tle_src_db = db
+
+    def reload_tle_db(self):
+        self.__load_tles_to_mem()
 
     def get_tle_db(self) -> CustomMemoryTLESource:
         return self.__tle_src_db
@@ -219,9 +219,8 @@ class SatLoader():
     def get_location(self) -> Location:
         return Location('loc', self.loc_lat, self.loc_long, self.loc_elev)
     
-    def get_timestamp(self) -> Datetime:
-        return dt.datetime.now()
-    
-
-            
+    def get_last_update_timestamp(self) -> Datetime:
+        fetcher = SatTLEFetcher()
+        timestamp = fetcher.get_oldest_timestamp()
+        return timestamp
 
