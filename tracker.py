@@ -8,6 +8,7 @@ import subprocess
 import logging
 import sys
 from custom_classes import CustomPredictor, CustomOverpass
+from data_layer import PassRepository
 import argparse
 
 # Configuración de argumentos
@@ -172,7 +173,10 @@ async def main() -> None:
     recovered_passes = []
     task_to_pass_map= {}
 
+    data_expose = PassRepository(ARGS)
+
     logger.info("-" * 50)
+
     # Comienza el loop infinito.
     while True:
         # Mientras la lista tenga espacio disponible.
@@ -241,6 +245,9 @@ async def main() -> None:
                     task_to_pass_map[task]=p
                     task_list.append(task)
 
+
+        # Se disponibilizan los datos actualizados de pasadas  
+        data_expose.update_passes(filtered_passes)
 
         done, pending = await asyncio.wait(task_list, return_when=asyncio.FIRST_COMPLETED)
         for task in done:
