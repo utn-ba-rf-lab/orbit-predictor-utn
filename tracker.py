@@ -8,9 +8,33 @@ import subprocess
 import logging
 import sys
 from custom_classes import CustomPredictor, CustomOverpass
+import argparse
 
-# Configurar el logger para que escriba a stdout (al journalctl).
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
+# Configuración de argumentos
+parser = argparse.ArgumentParser()
+parser.add_argument("--dev", action="store_true", dest="DEV", help="Ejecutar en modo desarrollo - Reduce el Delay entre pasadas")
+parser.add_argument("--debug", action="store_true", dest="DEBUG", help="Mostrar información detallada de depuración en los logs")
+parser.add_argument("--passes-outfile", nargs="?", const="passes_outfile.json", default = None, dest="PASSES_OUTFILE", metavar="FILENAME", help="Activa la exportación de las pasadas programadas. Si se pasa sin valor, ruta por default: passes_outfile.json; sin flag, no se exporta.")
+parser.add_argument("--api", nargs="+", dest="API", metavar=("PORT", "HOST"), help="Levanta y configura la API con puerto obligatorio (primer argumento) y host opcional (segundo argumento, default: localhost). Sin flag, no se expone la api.")
+
+ARGS = parser.parse_args()
+
+#Verificar argumentos para --api
+if ARGS.API:
+    if len(ARGS.API) > 2:
+        parser.error("--api acepta solo 2 argumentos: puerto obligatorio y host opcional")
+
+    # Normalizar la lista para que siempre tenga [port, host]
+    port = int(ARGS.API[0])
+    host = ARGS.API[1] if len(ARGS.API) > 1 else "localhost"
+    ARGS.API = [port, host]
+
+
+# Configurar el logger para que escriba a stdout (al journalctl) según el modo (Level INFO por defecto)
+if ARGS.DEBUG:
+    logging.basicConfig(level=logging.DEBUG, format='%(levelname)s - %(message)s')
+else:
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +42,8 @@ MAX_AWAITABLE_PASSES = 5
 LAUNCH_BEFORE_SECS = dt.timedelta(seconds=10)
 TIME_BETWEEN_UPDATES = dt.timedelta(weeks=1)
 
+#Factor de reducción de delay para Modo Desarrollo (--dev)
+DEV_DELAY_FACTOR=0.0001
 
 def sorted_by_aos(_list):
     return sorted(_list, key=lambda p: p.aos)
@@ -64,6 +90,11 @@ def filter_overlapping_passes(passes, track_list):
 
 async def pass_worker_async(p, track):
     delay = (p.aos - dt.datetime.now(dt.timezone.utc) - LAUNCH_BEFORE_SECS).total_seconds()
+
+    # Reducción de delay en Modo Desarrollo (--dev)
+    if ARGS.DEV:
+        delay = delay * DEV_DELAY_FACTOR
+
     await asyncio.sleep(max(0, delay))
 
     cmd = [
