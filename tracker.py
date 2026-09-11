@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 MAX_AWAITABLE_PASSES = 5
 LAUNCH_BEFORE_SECS = dt.timedelta(seconds=10)
+TIME_BETWEEN_UPDATES = dt.timedelta(weeks=1)
 
 #Factor de reducción de delay para Modo Desarrollo (--dev)
 DEV_DELAY_FACTOR=0.0001
@@ -152,6 +153,7 @@ async def main() -> None:
     track_list = loader.get_tracked_list()
     # Consigue los ultimos TLEs de la base de datos.
     tles = loader.get_tle_db()
+    last_tle_update = loader.get_last_update_timestamp()
     # Consigue la ubicación actual de la configuración.
     loc = loader.get_location()
 
@@ -178,6 +180,16 @@ async def main() -> None:
             current_earlier_pass = None
             
             candidates = []
+
+            if dt.datetime.now() - last_tle_update > TIME_BETWEEN_UPDATES:
+                logger.info(f"[+] Actualizando TLEs...")
+                loader.reload_tle_db()
+                tles = loader.get_tle_db()
+                for p in pred_db:
+                    p.predictor = tles.get_predictor(p.sate_id)
+                    logger.debug(f"[*] Configurando predictor de {p.sate_id}.")
+                logger.info(f"[+] Actualizado correctamente.")
+                last_tle_update = dt.datetime.now()
 
             # En cada predictor, nos fijamos la próxima pasada, pasamos su AOS a UTC-3.
             for p in pred_db:
