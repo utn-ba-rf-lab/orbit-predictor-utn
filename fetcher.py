@@ -116,7 +116,7 @@ class SatTLEFetcher():
         
         return srcfiles
 
-    def get_oldest_timestamp(self) -> Datetime:
+    def get_oldest_timestamp(self) -> datetime:
         now = datetime.now()
         oldest = now
         for src in self.__srcdb:
@@ -126,5 +126,5 @@ class SatTLEFetcher():
             if timestamp < oldest:
                 oldest = timestamp
         if oldest == now:
-            oldest = 0
+            oldest = datetime.min
         return oldest

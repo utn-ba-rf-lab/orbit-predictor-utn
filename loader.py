@@ -5,6 +5,7 @@ from orbit_predictor.sources import TLESource
 from orbit_predictor.utils import datetime_from_jday
 from orbit_predictor.locations import Location
 from fetcher import SatTLEFetcher
+from datetime import datetime
 
 from collections import defaultdict
 
@@ -219,8 +220,7 @@ class SatLoader():
     def get_location(self) -> Location:
         return Location('loc', self.loc_lat, self.loc_long, self.loc_elev)
     
-    def get_last_update_timestamp(self) -> Datetime:
+    def get_last_update_timestamp(self) -> datetime:
         fetcher = SatTLEFetcher()
         timestamp = fetcher.get_oldest_timestamp()
         return timestamp
-
