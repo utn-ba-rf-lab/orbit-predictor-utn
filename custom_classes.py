@@ -65,7 +65,6 @@ class CustomOverpass():
         self._task = None      
         self._overlapped_passes=[]
         self._orbit_number = self._predictor.orbit_number_at(self._overpass.aos)
-        
 
     def __getattr__(self, attr_name):
         # Se buscan los metodos/atributos que no esten en esta clase en la clase original.
@@ -94,6 +93,14 @@ class CustomOverpass():
     def handle_candidate_pass(self):
         #La pasada tiene referenciado el predictor del satelite. Se actualiza el punto de busqueda del predictor con el LOS de la pasada que se va a considerar.
         self._predictor.custom_next_pass_date=self.los
+
+    def to_dict(self):
+        return {
+            "satelite": self.sate_id,
+            "aos": self.aos.isoformat() if hasattr(self.aos, "isoformat") else self.aos,
+            "los": self.los.isoformat() if hasattr(self.los, "isoformat") else self.los,
+            "elev_max": f"{self.max_elevation_deg:.1f}°",
+        }
 
     @property
     def overlapped_passes(self):
