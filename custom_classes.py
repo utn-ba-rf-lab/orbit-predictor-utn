@@ -2,9 +2,10 @@ import datetime as dt
 import math
 
 class CustomPredictor():
-    def __init__(self, predictor):
+    def __init__(self, predictor, name):
         self._predictor = predictor
         self._custom_next_pass_date = dt.datetime.now(tz=dt.timezone.utc)
+        self._sat_name = name
 
     def __getattr__(self, attr_name):
         # Se buscan los metodos/atributos que no esten en esta clase en la clase original.
@@ -27,6 +28,10 @@ class CustomPredictor():
     @predictor.setter
     def predictor(self, value):
         self._predictor = value
+
+    @property
+    def sat_name(self):
+        return self._sat_name
 
     def orbit_number_at(self, aos_overpass):
         """
@@ -65,6 +70,7 @@ class CustomOverpass():
         self._task = None      
         self._overlapped_passes=[]
         self._orbit_number = self._predictor.orbit_number_at(self._overpass.aos)
+        self._sat_name = self.predictor.sat_name
 
     def __getattr__(self, attr_name):
         # Se buscan los metodos/atributos que no esten en esta clase en la clase original.
@@ -96,7 +102,8 @@ class CustomOverpass():
 
     def to_dict(self):
         return {
-            "satelite": self.sate_id,
+            "sat_name": self.sat_name,
+            "sat_id": self.sate_id,
             "aos": self.aos.isoformat() if hasattr(self.aos, "isoformat") else self.aos,
             "los": self.los.isoformat() if hasattr(self.los, "isoformat") else self.los,
             "elev_max": f"{self.max_elevation_deg:.1f}°",
@@ -130,3 +137,7 @@ class CustomOverpass():
     @property
     def orbit_number(self):
         return self._orbit_number
+
+    @property
+    def sat_name(self):
+        return self._sat_name

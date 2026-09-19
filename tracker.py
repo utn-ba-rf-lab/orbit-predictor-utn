@@ -164,8 +164,9 @@ async def main() -> None:
     # Por cada satélite observado, se consigue su predictór de la base de datos.
     for t_sat in track_list.values():
         p = tles.get_predictor(t_sat.get_id())
+        name=tles.get_name_from_id(t_sat.get_id())
         #Al conseguir el predictor, se lo envuelve en la clase propia CustomPredictor
-        custom_p=CustomPredictor(p)    
+        custom_p=CustomPredictor(p, name)    
         pred_db.append(custom_p)
 
     task_list: list[asyncio.Task] = []
