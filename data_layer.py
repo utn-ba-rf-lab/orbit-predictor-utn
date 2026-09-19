@@ -79,16 +79,27 @@ class PassesApiService():
         self.app = FastAPI()
 
         @self.app.get("/passes")
-        def get_passes():
-            return [p.to_dict() for p in self._repo.passes]
+        def get_passes(sat_id: int | None = None, sat_name: str | None = None):
+            results = self._repo.passes
+
+            if sat_id is not None:
+                results = [p for p in results if p.sate_id == sat_id]
+
+            if sat_name is not None:
+                delete_chars = " -._"
+                delete_table = str.maketrans("", "", delete_chars)
+                filtro = sat_name.lower().translate(delete_table)
+                results = [
+                    p for p in results
+                    if p.sat_name.lower().translate(delete_table) == filtro
+                ]
+            
+            return [p.to_dict() for p in results]
 
         @self.app.get("/next")
         def get_next_pass():
             return self._repo.passes[0].to_dict() if self._repo.passes else {}
 
-        @self.app.get("/passes/{sat_id}")
-        def get_passes_by_id(sat_id: int):
-            return [p.to_dict() for p in self._repo.passes if p.sate_id == sat_id]
 
         # Lanzar uvicorn en un hilo separado
         thread = threading.Thread(
