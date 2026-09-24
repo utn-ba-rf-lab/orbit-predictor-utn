@@ -10,6 +10,7 @@ import sys
 from custom_classes import CustomPredictor, CustomOverpass
 from data_layer import PassRepository
 import argparse
+from utils import format_sate_name
 
 # Configuración de argumentos
 parser = argparse.ArgumentParser()
@@ -46,6 +47,7 @@ TIME_BETWEEN_UPDATES = dt.timedelta(weeks=1)
 #Factor de reducción de delay para Modo Desarrollo (--dev)
 DEV_DELAY_FACTOR=0.0001
 
+
 def sorted_by_aos(_list):
     return sorted(_list, key=lambda p: p.aos)
 
@@ -66,7 +68,7 @@ def filter_overlapping_passes(passes, track_list):
             # Chequear si la pasada que actualmente está en la lista todavia no comenzo (evita cancelar tareas que ya comenzaron, no solo por la cancelación del worker, sino también por el uso de la antena)
             # Solo se verifican solapamientos si la pasada que ya está agendada todavía no comenzo o no está a punto de comenzar
             if (last.aos - (1.5 * LAUNCH_BEFORE_SECS ))>dt.datetime.now(dt.timezone.utc):
-                logger.info(f"[+] Colisión de pasadas encontrada: {p.sate_id} y {last.sate_id}")
+                logger.info(f"[+] Colisión de pasadas encontrada: {p.sat_name} (CatNum: {p.sate_id}) y {last.sat_name} (CatNum: {last.sate_id})")
                 logger.debug(f"    Tiempo de arranque de {p.sate_id}: {p.aos}")
                 logger.debug(f"    Tiempo de finalización de {last.sate_id}: {last.los}")
                 logger.debug(f"    Elevación y preferencia de {p.sate_id}: {p.max_elevation_deg} | {track_list[p.sate_id].get_priority()}")
@@ -75,14 +77,16 @@ def filter_overlapping_passes(passes, track_list):
                 if (track_list[p.sate_id].get_priority() > track_list[last.sate_id].get_priority() or
                     (p.max_elevation_deg > last.max_elevation_deg and
                     track_list[p.sate_id].get_priority() == track_list[last.sate_id].get_priority())):
-                    logger.info(f"    Se prefiere al satélite: {p.sate_id}")
-
                     p.prefer_over(last)
+                    logger.info(f"    Se prefiere al satélite: {p.sat_name} (CatNum: {p.sate_id})")
+                    logger.info(f"    Pasadas eliminadas por {p.sat_name} (CatNum: {p.sate_id}): {len(p.overlapped_passes)}")
                     filtered[-1] = p  # reemplazamos al último
                 # si no, simplemente descartamos este
                 else: 
-                    logger.info(f"    Se prefiere al satélite: {last.sate_id}")
                     last.prefer_over(p)
+                    logger.info(f"    Se prefiere al satélite: {last.sat_name} (CatNum: {last.sate_id})")
+                    logger.info(f"    Pasadas eliminadas por {last.sat_name} (CatNum: {last.sate_id}): {len(last.overlapped_passes)}")
+
                 logger.info("-" * 50)
         else:
             filtered.append(p)
@@ -108,7 +112,7 @@ async def pass_worker_async(p, track):
         "--orbit-number", str(p.orbit_number),
     ]
 
-    logger.info(f"[+] Ejecutando {p.sate_id}: {' '.join(cmd)}")
+    logger.info(f"[+] Ejecutando {p.sat_name} (CatNum: {p.sate_id}): {' '.join(cmd)}")
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -118,7 +122,7 @@ async def pass_worker_async(p, track):
 
     stdout, stderr = await proc.communicate()
 
-    logger.info(f"[+] Finalizó {p.sate_id} con código de retorno: {proc.returncode}")
+    logger.info(f"[+] Finalizó {p.sat_name} (CatNum: {p.sate_id}) con código de retorno: {proc.returncode}")
     if stdout:
         logger.info(f"    STDOUT:\n{stdout.decode('UTF-8')}")
     if stderr:
@@ -192,7 +196,7 @@ async def main() -> None:
                 tles = loader.get_tle_db()
                 for p in pred_db:
                     p.predictor = tles.get_predictor(p.sate_id)
-                    logger.debug(f"[*] Configurando predictor de {p.sate_id}.")
+                    logger.debug(f"[*] Configurando predictor de {p.sat_name} (CatNum: {p.sate_id}).")
                 logger.info(f"[+] Actualizado correctamente.")
                 last_tle_update = dt.datetime.now()
 
@@ -205,7 +209,8 @@ async def main() -> None:
                     satpass=CustomOverpass(satpass, p)
                     
                     logger.info(
-                        f"[+] Próxima pasada encontrada: {satpass.sate_id} | "
+                        f"[+] Próxima pasada encontrada: {format_sate_name(satpass.sat_name)} | "
+                        f"CatNum: {satpass.sate_id} | "
                         f"AOS: {satpass.aos.astimezone(tz=dt.timezone(dt.timedelta(hours=-3))).strftime("%Y-%m-%d %H:%M:%S")} | "
                         f"LOS: {satpass.los.astimezone(tz=dt.timezone(dt.timedelta(hours=-3))).strftime("%Y-%m-%d %H:%M:%S")} | "
                         f"Elevación máxima: {satpass.max_elevation_deg:.1f}°"
@@ -231,7 +236,8 @@ async def main() -> None:
                     track = track_list[p.sate_id]
 
                     logger.info(
-                        f"[+] Planificando ejecución: {p.sate_id} | "
+                        f"[+] Planificando ejecución: {p.sat_name} | "
+                        f"CatNum: {p.sate_id} | "
                         f"Script: {track.get_script()} | "
                         f"Prioridad: {track.get_priority()} | "
                         f"Pasadas Eliminadas: {len(p.overlapped_passes)}"
@@ -256,16 +262,16 @@ async def main() -> None:
             try:
                 await task
             except asyncio.CancelledError:
-                logger.info(f"[-] Pasada de Satélite {sat_p.sate_id if sat_p else 'unknown'} AOS {sat_p.aos.astimezone(tz=dt.timezone(dt.timedelta(hours=-3)))} cancelada por overlapping.")
+                logger.info(f"[-] Pasada de Satélite { f'{sat_p.sat_name} (CatNum: {sat_p.sate_id})' if sat_p else 'unknown'} AOS {sat_p.aos.astimezone(tz=dt.timezone(dt.timedelta(hours=-3)))} cancelada por overlapping.")
 
                 # Recuperar las pasadas descartadas debido a la pasada que se acaba de cancelar
                 if sat_p.overlapped_passes:
-                    logger.info(f"[-] Pasadas recuperadas debido a la cancelación de {sat_p.sate_id if sat_p else 'unknown'}:")
+                    logger.info(f"[-] Pasadas recuperadas debido a la cancelación de {f'{sat_p.sat_name} (CatNum: {sat_p.sate_id})' if sat_p else 'unknown'}:")
                     
                     for recovered_p in sat_p.recover_overlapped_passes():
                         if recovered_p not in filtered_passes:
                             recovered_passes.append(recovered_p)
-                            logger.info(f"    Pasada recuperada {recovered_p.sate_id if sat_p else 'unknown'} AOS {sat_p.aos.astimezone(tz=dt.timezone(dt.timedelta(hours=-3)))}")
+                            logger.info(f"        Pasada recuperada {f'{recovered_p.sat_name} (CatNum: {recovered_p.sate_id})' if sat_p else 'unknown'} AOS {sat_p.aos.astimezone(tz=dt.timezone(dt.timedelta(hours=-3)))}")
 
             except Exception as e:
                 logger.exception(f"[x] Error en tarea: {e}")

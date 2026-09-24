@@ -2,8 +2,7 @@ import sys
 import json
 from pathlib import Path
 from datetime import datetime
-
-MSNL=20 #MAX_SAT_NAME_LENGTH
+from utils import format_sate_name
 
 delete_chars = " _-."   # caracteres a eliminar: espacio, guion bajo, guión medio y punto
 delete_table = str.maketrans("", "", delete_chars) # tabla de traduccion
@@ -39,7 +38,7 @@ def mostrar_pasadas(json_file, sat_filter=None):
             ):
             continue
         print(
-            f"Satélite: {p['sat_name'][:(MSNL-3)]+'...' if len(p['sat_name'])>MSNL else p['sat_name']:<{MSNL}} | "
+            f"Satélite: {format_sate_name(p['sat_name'])} | "
             f"CatNum: {p['sat_id']} | "
             f"AOS: {format_time(p['aos'])} | "
             f"LOS: {format_time(p['los'])} | "
