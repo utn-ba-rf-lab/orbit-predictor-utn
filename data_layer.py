@@ -79,19 +79,19 @@ class PassesApiService():
         self.app = FastAPI()
 
         @self.app.get("/passes")
-        def get_passes(sat_id: int | None = None, sat_name: str | None = None):
+        def get_passes(sate_id: int | None = None, sate_name: str | None = None):
             results = self._repo.passes
 
-            if sat_id is not None:
-                results = [p for p in results if p.sate_id == sat_id]
+            if sate_id is not None:
+                results = [p for p in results if p.sate_id == sate_id]
 
-            if sat_name is not None:
+            if sate_name is not None:
                 delete_chars = " -._"
                 delete_table = str.maketrans("", "", delete_chars)
-                filtro = sat_name.lower().translate(delete_table)
+                filtro = sate_name.lower().translate(delete_table)
                 results = [
                     p for p in results
-                    if p.sat_name.lower().translate(delete_table) == filtro
+                    if p.sate_name.lower().translate(delete_table) == filtro
                 ]
             
             return [p.to_dict() for p in results]

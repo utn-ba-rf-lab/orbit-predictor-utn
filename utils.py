@@ -1,6 +1,6 @@
 
 
-MSNL=15 #MAX_SAT_NAME_LENGTH
+MSNL=15 #MAX_SATE_NAME_LENGTH
 
 
 def format_len_text(texto, max_len):
