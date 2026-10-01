@@ -6,6 +6,8 @@ import threading
 import uvicorn
 from fastapi import FastAPI
 import logging
+import re
+import utils
 
 logger = logging.getLogger(__name__)
 
@@ -86,12 +88,12 @@ class PassesApiService():
                 results = [p for p in results if p.sate_id == sate_id]
 
             if sate_name is not None:
-                delete_chars = " -._"
-                delete_table = str.maketrans("", "", delete_chars)
-                filtro = sate_name.lower().translate(delete_table)
+
+                filtro = utils.build_filto(sate_name)
+
                 results = [
                     p for p in results
-                    if p.sate_name.lower().translate(delete_table) == filtro
+                    if utils.sate_name_matches(p.sate_name, filtro)
                 ]
             
             return [p.to_dict() for p in results]
