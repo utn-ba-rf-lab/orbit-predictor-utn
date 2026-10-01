@@ -32,14 +32,14 @@ def mostrar_pasadas(json_file, sat_filter, show_only_first):
     
     for p in passes:
         if sat_filter and not (
-            str(p["sat_id"]) == str(sat_filter) or 
+            str(p["sate_id"]) == str(sat_filter) or 
             str(p["sat_name"]) == str(sat_filter) or 
             str(p["sat_name"]).lower().translate(delete_table) == str(sat_filter).lower().translate(delete_table)
             ):
             continue
         print(
-            f"Satélite: {format_sate_name(p['sat_name'])} | "
-            f"CatNum: {p['sat_id']} | "
+            f"Satélite: {format_sate_name(p['sate_name'])} | "
+            f"CatNum: {p['sate_id']} | "
             f"AOS: {format_time(p['aos'])} | "
             f"LOS: {format_time(p['los'])} | "
             f"Elevación máxima: {p['elev_max']}"
