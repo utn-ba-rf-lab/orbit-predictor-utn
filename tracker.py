@@ -110,6 +110,7 @@ async def pass_worker_async(p, track):
         "--los", p.los.isoformat(),
         "--max-elev", str(p.max_elevation_deg),
         "--orbit-number", str(p.orbit_number),
+        "--sate-name", str(p.sate_name),
     ]
 
     logger.info(f"[+] Ejecutando {p.sate_name} (CatNum: {p.sate_id}): {' '.join(cmd)}")
