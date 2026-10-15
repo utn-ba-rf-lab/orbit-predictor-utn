@@ -89,7 +89,7 @@ class PassesApiService():
 
             if sate_name is not None:
 
-                filtro = utils.build_filto(sate_name)
+                filtro = utils.build_filtro(sate_name)
 
                 results = [
                     p for p in results
