@@ -2,6 +2,11 @@ import sys
 import json
 from pathlib import Path
 from datetime import datetime
+from utils import format_sate_name
+
+delete_chars = " _-."   # caracteres a eliminar: espacio, guion bajo, guión medio y punto
+delete_table = str.maketrans("", "", delete_chars) # tabla de traduccion
+
 
 def format_time(iso_str):
     # Convierte la cadena ISO a objeto datetime
@@ -9,7 +14,7 @@ def format_time(iso_str):
     # Devuelve la fecha formateada, solo fecha y hora sin microsegundos ni zona
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
-def mostrar_pasadas(json_file, sat_filter=None):
+def mostrar_pasadas(json_file, sat_filter, show_only_first):
     json_file_path = Path(json_file)
     
     try:
@@ -26,14 +31,21 @@ def mostrar_pasadas(json_file, sat_filter=None):
         return
     
     for p in passes:
-        if sat_filter and str(p["satelite"]) != str(sat_filter):
+        if sat_filter and not (
+            str(p["sate_id"]) == str(sat_filter) or 
+            str(p["sat_name"]) == str(sat_filter) or 
+            str(p["sat_name"]).lower().translate(delete_table) == str(sat_filter).lower().translate(delete_table)
+            ):
             continue
         print(
-            f"Satélite: {p['satelite']} | "
+            f"Satélite: {format_sate_name(p['sate_name'])} | "
+            f"CatNum: {p['sate_id']} | "
             f"AOS: {format_time(p['aos'])} | "
             f"LOS: {format_time(p['los'])} | "
             f"Elevación máxima: {p['elev_max']}"
         )
+        if show_only_first:
+            break
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -41,5 +53,10 @@ if __name__ == "__main__":
     else:
         json_file = sys.argv[1]
         #Validar el segundo arguemnto (que es opcional): se utiliza para mostrar las pasadas de un solo satélite
-        sat_filter = sys.argv[2] if len(sys.argv) > 2 else None
-        mostrar_pasadas(json_file, sat_filter)
+        only_next=False
+        arg_start=2
+        if len(sys.argv) > 2 and sys.argv[2].lower() == 'next':
+            only_next=True
+            arg_start=3
+        sat_filter = " ".join(sys.argv[arg_start:]) if len(sys.argv) > arg_start else None
+        mostrar_pasadas(json_file, sat_filter, only_next)
