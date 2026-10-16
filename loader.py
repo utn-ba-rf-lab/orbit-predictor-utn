@@ -186,8 +186,10 @@ class SatLoader():
 
         fetcher = SatTLEFetcher()
         db = CustomMemoryTLESource()
+        logger.debug(f'[d] Lista de satélites: {self.__satlist}')
+        sate_ids = list(self.__satlist)
 
-        sources = fetcher.fetch_urls()
+        sources = fetcher.fetch_urls(sate_ids)
         for file in sources:
             logger.debug(f'[d] Cargando archivo {file}')
             parsed = omm.parse_xml(file)
