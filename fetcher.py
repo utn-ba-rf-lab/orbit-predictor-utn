@@ -65,7 +65,7 @@ class SatTLEFetcher():
                         and not src['name'] in seen):
                         if (src.get('timestamp') == None):
                             src['timestamp'] = 0
-                        if (src.get('type') == None:
+                        if (src.get('type') == None):
                             src['type'] == 'group'
                         srcs_obj.append(src)
                         seen.append(src['name'])
