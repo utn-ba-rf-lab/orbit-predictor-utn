@@ -12,7 +12,7 @@ def format_sate_name(nombre_satelite):
     return format_len_text(nombre_satelite, MSNL)
 
 
-DELETE_CHARS = " -._"
+DELETE_CHARS = " -._\"'´`"
 DELETE_TABLE = str.maketrans("", "", DELETE_CHARS)
 
 def normalizar_sate_name(sate_name: str) -> str:
