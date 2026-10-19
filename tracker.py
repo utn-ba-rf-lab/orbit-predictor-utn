@@ -176,6 +176,7 @@ async def main() -> None:
 
     task_list: list[asyncio.Task] = []
     filtered_passes = []
+    past_passes = []
     recovered_passes = []
     task_to_pass_map= {}
 
@@ -255,13 +256,14 @@ async def main() -> None:
 
 
         # Se disponibilizan los datos actualizados de pasadas  
-        data_expose.update_passes(filtered_passes)
+        data_expose.update_passes(new_passes=filtered_passes, past_passes=past_passes)
 
         done, pending = await asyncio.wait(task_list, return_when=asyncio.FIRST_COMPLETED)
         for task in done:
             sat_p=task_to_pass_map.get(task)
             try:
                 await task
+                past_passes.insert(0,sat_p)
             except asyncio.CancelledError:
                 logger.info(f"[-] Pasada de Satélite { f'{sat_p.sate_name} (CatNum: {sat_p.sate_id})' if sat_p else 'unknown'} AOS {sat_p.aos.astimezone(tz=dt.timezone(dt.timedelta(hours=-3)))} cancelada por overlapping.")
 
