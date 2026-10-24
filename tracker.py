@@ -10,7 +10,7 @@ import sys
 from custom_classes import CustomPredictor, CustomOverpass
 from data_layer import PassRepository
 import argparse
-from utils import format_sate_name
+from utils import format_sate_name, format_fecha_utc
 
 # Configuración de argumentos
 parser = argparse.ArgumentParser()
@@ -214,8 +214,8 @@ async def main() -> None:
                     logger.info(
                         f"[+] Próxima pasada encontrada: {format_sate_name(satpass.sate_name)} | "
                         f"CatNum: {satpass.sate_id} | "
-                        f"AOS: {satpass.aos.astimezone(tz=dt.timezone(dt.timedelta(hours=-3))).strftime("%Y-%m-%d %H:%M:%S")} | "
-                        f"LOS: {satpass.los.astimezone(tz=dt.timezone(dt.timedelta(hours=-3))).strftime("%Y-%m-%d %H:%M:%S")} | "
+                        f"AOS: {format_fecha_utc(satpass.aos)} | "
+                        f"LOS: {format_fecha_utc(satpass.los)} | "
                         f"Elevación máxima: {satpass.max_elevation_deg:.1f}°"
                     )
 
@@ -267,7 +267,7 @@ async def main() -> None:
                 past_passes.insert(0,sat_p)
                 past_passes = past_passes[:SIZE_OF_PAST_PASSES]
             except asyncio.CancelledError:
-                logger.info(f"[-] Pasada de Satélite { f'{sat_p.sate_name} (CatNum: {sat_p.sate_id})' if sat_p else 'unknown'} AOS {sat_p.aos.astimezone(tz=dt.timezone(dt.timedelta(hours=-3)))} cancelada por overlapping.")
+                logger.info(f"[-] Pasada de Satélite { f'{sat_p.sate_name} (CatNum: {sat_p.sate_id})' if sat_p else 'unknown'} AOS {format_fecha_utc(sat_p.aos)} cancelada por overlapping.")
 
                 # Recuperar las pasadas descartadas debido a la pasada que se acaba de cancelar
                 if sat_p.overlapped_passes:
@@ -276,7 +276,7 @@ async def main() -> None:
                     for recovered_p in sat_p.recover_overlapped_passes():
                         if recovered_p not in filtered_passes:
                             recovered_passes.append(recovered_p)
-                            logger.info(f"        Pasada recuperada {f'{recovered_p.sate_name} (CatNum: {recovered_p.sate_id})' if sat_p else 'unknown'} AOS {sat_p.aos.astimezone(tz=dt.timezone(dt.timedelta(hours=-3)))}")
+                            logger.info(f"        Pasada recuperada {f'{recovered_p.sate_name} (CatNum: {recovered_p.sate_id})' if sat_p else 'unknown'} AOS {format_fecha_utc(recovered_p.aos)}")
 
             except Exception as e:
                 logger.exception(f"[x] Error en tarea: {e}")

@@ -5,12 +5,6 @@ from datetime import datetime
 from utils import format_sate_name
 import utils
 
-def format_time(iso_str):
-    # Convierte la cadena ISO a objeto datetime
-    dt = datetime.fromisoformat(iso_str)
-    # Devuelve la fecha formateada, solo fecha y hora sin microsegundos ni zona
-    return dt.strftime("%Y-%m-%d %H:%M:%S")
-
 def mostrar_pasadas(json_file, sate_filter, show_only_first):
     json_file_path = Path(json_file)
     
@@ -38,8 +32,8 @@ def mostrar_pasadas(json_file, sate_filter, show_only_first):
         print(
             f"Satélite: {format_sate_name(p['sate_name'])} | "
             f"CatNum: {p['sate_id']} | "
-            f"AOS: {format_time(p['aos'])} | "
-            f"LOS: {format_time(p['los'])} | "
+            f"AOS: {p['aos']} | "
+            f"LOS: {p['los']} | "
             f"Elevación máxima: {p['elev_max']}"
         )
         if show_only_first:
