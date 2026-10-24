@@ -35,4 +35,4 @@ def format_fecha_utc(fecha):
     if not isinstance(fecha, dt.datetime):
         return None
     
-    return fecha.astimezone(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    return fecha.astimezone(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S") + " UTC"
