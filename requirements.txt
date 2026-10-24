@@ -1,5 +1,5 @@
 orbit_predictor>=1.15.0
 requests>=2.31.0
 sgp4>=2.22
-uvicorn
-fastapi
+uvicorn>=0.52.1
+fastapi>=0.141.1
