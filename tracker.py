@@ -41,6 +41,7 @@ else:
 logger = logging.getLogger(__name__)
 
 MAX_AWAITABLE_PASSES = 5
+SIZE_OF_PAST_PASSES = 100
 LAUNCH_BEFORE_SECS = dt.timedelta(seconds=10)
 TIME_BETWEEN_UPDATES = dt.timedelta(weeks=1)
 
@@ -264,6 +265,7 @@ async def main() -> None:
             try:
                 await task
                 past_passes.insert(0,sat_p)
+                past_passes = past_passes[:SIZE_OF_PAST_PASSES]
             except asyncio.CancelledError:
                 logger.info(f"[-] Pasada de Satélite { f'{sat_p.sate_name} (CatNum: {sat_p.sate_id})' if sat_p else 'unknown'} AOS {sat_p.aos.astimezone(tz=dt.timezone(dt.timedelta(hours=-3)))} cancelada por overlapping.")
 
