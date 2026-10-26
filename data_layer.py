@@ -4,8 +4,12 @@ from abc import ABC, abstractmethod
 from custom_classes import CustomOverpass
 import threading
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, Query
+from pydantic import BaseModel, ConfigDict
+from typing import Annotated
 import logging
+import re
+import utils
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +74,13 @@ class FilePassesObserver(BasePassesObserver):
 
 
 class PassesApiService():
+
+    class PassFilterParams(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        
+        sate_id: int | None = None
+        sate_name: str | None = None
+
     def __init__(self, repository: PassRepository, port, host):
         self._repo = repository
         self._host = host
@@ -79,19 +90,19 @@ class PassesApiService():
         self.app = FastAPI()
 
         @self.app.get("/passes")
-        def get_passes(sate_id: int | None = None, sate_name: str | None = None):
+        def get_passes(filters: Annotated[PassesApiService.PassFilterParams, Query()]):
             results = self._repo.passes
 
-            if sate_id is not None:
-                results = [p for p in results if p.sate_id == sate_id]
+            if filters.sate_id is not None:
+                results = [p for p in results if p.sate_id == filters.sate_id]
 
-            if sate_name is not None:
-                delete_chars = " -._"
-                delete_table = str.maketrans("", "", delete_chars)
-                filtro = sate_name.lower().translate(delete_table)
+            if filters.sate_name is not None:
+
+                filtro = utils.build_filtro(filters.sate_name)
+
                 results = [
                     p for p in results
-                    if p.sate_name.lower().translate(delete_table) == filtro
+                    if utils.sate_name_matches(p.sate_name, filtro)
                 ]
             
             return [p.to_dict() for p in results]

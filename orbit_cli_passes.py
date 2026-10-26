@@ -3,10 +3,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 from utils import format_sate_name
-
-delete_chars = " _-."   # caracteres a eliminar: espacio, guion bajo, guión medio y punto
-delete_table = str.maketrans("", "", delete_chars) # tabla de traduccion
-
+import utils
 
 def format_time(iso_str):
     # Convierte la cadena ISO a objeto datetime
@@ -14,7 +11,7 @@ def format_time(iso_str):
     # Devuelve la fecha formateada, solo fecha y hora sin microsegundos ni zona
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
-def mostrar_pasadas(json_file, sat_filter, show_only_first):
+def mostrar_pasadas(json_file, sate_filter, show_only_first):
     json_file_path = Path(json_file)
     
     try:
@@ -30,11 +27,12 @@ def mostrar_pasadas(json_file, sat_filter, show_only_first):
         print(f"Error al leer {json_file_path}: {e}")
         return
     
+    filtro = utils.build_filtro(sate_filter) if sate_filter else None
+    
     for p in passes:
         if sat_filter and not (
-            str(p["sate_id"]) == str(sat_filter) or 
-            str(p["sat_name"]) == str(sat_filter) or 
-            str(p["sat_name"]).lower().translate(delete_table) == str(sat_filter).lower().translate(delete_table)
+            str(p["sate_id"]) == str(sate_filter) or 
+            utils.sate_name_matches(p["sate_name"], filtro)
             ):
             continue
         print(
