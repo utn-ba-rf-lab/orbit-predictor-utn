@@ -99,6 +99,8 @@ class SatTLEFetcher():
         
         srcfiles = []
 
+        logger.debug(f'[d] Fuentes: {self.__srcdb}')
+
         incomplete_srcs = list(
                 filter(lambda src: src.get('type') == "incomplete", self.__srcdb))
 
@@ -122,10 +124,14 @@ class SatTLEFetcher():
                         with open(filepath, 'wb') as f:
                             f.write(resp.content)
                         src['timestamp'] = int(datetime.now().timestamp())
+                        logger.debug(f'[d] Fuente usada: {next(__src for __src in self.__srcdb if (__src == src))}')
+
                     srcfiles.append(self.__filepath_from_srcname(src['name'] + str(sate)))
 
-
                     logger.debug(f'[d] Respuesta recibida de la fuente: {resp.text}')
+
+        with open(self.__srcsfile, 'w') as f:
+            json.dump(self.__srcdb, f, indent=4)
 
         return srcfiles
 
@@ -151,9 +157,6 @@ class SatTLEFetcher():
                         f.write(resp.content)
                     src['timestamp'] = int(datetime.now().timestamp())
             srcfiles.append(self.__filepath_from_srcname(src['name']))
-
-        with open(self.__srcsfile, 'w') as f:
-            json.dump(self.__srcdb, f, indent=4)
 
         return srcfiles
 
