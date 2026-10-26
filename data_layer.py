@@ -24,7 +24,8 @@ class PassRepository:
     def __init__(self, ARGS):
         if not hasattr(self, "_initialized"):  # evita re-inicializar
             self._initialized = True
-            self._passes: List[CustomOverpass] = []
+            self._future_passes: List[CustomOverpass] = []
+            self._past_passes: List[CustomOverpass] = []
             self._observers = []
 
             #Registrar Observadores
@@ -33,9 +34,10 @@ class PassRepository:
             #Inicializar Servicios
             if ARGS.API: PassesApiService(self, port=ARGS.API[0], host=ARGS.API[1])
 
-    def update_passes(self, new_passes: List[CustomOverpass]):
+    def update_passes(self, new_passes: List[CustomOverpass], past_passes: List[CustomOverpass]):
         """Actualiza la lista y notifica automáticamente."""
-        self._passes = new_passes
+        self._future_passes = new_passes
+        self._past_passes = past_passes
         self.notify_observers()
 
     def notify_observers(self):
@@ -43,8 +45,12 @@ class PassRepository:
             obs.update()
 
     @property
-    def passes(self):
-        return self._passes
+    def future_passes(self):
+        return self._future_passes
+
+    @property
+    def past_passes(self):
+        return self._past_passes
 
 
 class BasePassesObserver(ABC):
@@ -64,11 +70,11 @@ class FilePassesObserver(BasePassesObserver):
         logger.info(f"[FilePassesExport] Inicializado para escribir en {self.filename}")
 
     def update(self):
-        data = [p.to_dict() for p in self._repo.passes]
+        data = [p.to_dict() for p in self._repo.future_passes]
         try:
             with open(self.filename, "w") as f:
                 json.dump(data, f, indent=4)
-            logger.debug(f"[FilePassesExport] Archivo actualizado, {len(self._repo.passes)} pasadas guardadas en {self.filename}")
+            logger.debug(f"[FilePassesExport] Archivo actualizado, {len(self._repo.future_passes)} pasadas guardadas en {self.filename}")
         except (OSError, IOError) as e:
             logger.error(f"[FilePassesExport] Error al escribir en {self.filename}: {e}")
 
@@ -89,10 +95,9 @@ class PassesApiService():
         # Crear la app FastAPI
         self.app = FastAPI()
 
-        @self.app.get("/passes")
-        def get_passes(filters: Annotated[PassesApiService.PassFilterParams, Query()]):
-            results = self._repo.passes
-
+        def _get_passes(passes, filters, limit = False):
+            results = passes
+            
             if filters.sate_id is not None:
                 results = [p for p in results if p.sate_id == filters.sate_id]
 
@@ -104,21 +109,47 @@ class PassesApiService():
                     p for p in results
                     if utils.sate_name_matches(p.sate_name, filtro)
                 ]
+
+            if limit == True:
+                return results[0].to_dict() if results else {}
             
             return [p.to_dict() for p in results]
 
-        @self.app.get("/next")
-        def get_next_pass():
-            return self._repo.passes[0].to_dict() if self._repo.passes else {}
+        @self.app.get("/passes")
+        def get_future_passes(filters: Annotated[PassesApiService.PassFilterParams, Query()]):
+            return _get_passes(self.repo.future_passes, filters)
 
+        @self.app.get("/passes/past")
+        def get_past_passes(filters: Annotated[PassesApiService.PassFilterParams, Query()]):
+            return _get_passes(self.repo.past_passes, filters)
+
+        @self.app.get("/passes/next")
+        def get_next_pass(filters: Annotated[PassesApiService.PassFilterParams, Query()]):
+            return _get_passes(self.repo.future_passes, filters, limit=True)
+
+        @self.app.get("/passes/last")
+        def get_last_pass(filters: Annotated[PassesApiService.PassFilterParams, Query()]):
+            return _get_passes(self.repo.past_passes, filters, limit=True)
 
         # Lanzar uvicorn en un hilo separado
         thread = threading.Thread(
             target=uvicorn.run,
             args=(self.app,),
-            kwargs={"host": self._host, "port": self._port, "log_level": "warning"},
+            kwargs={"host": self.host, "port": self.port, "log_level": "warning"},
             daemon=True
         )
         thread.start()
 
-        logger.info(f"[API] API corriendo en {self._host}:{self._port}")
+        logger.info(f"[API] API corriendo en {self.host}:{self.port}")
+
+    @property
+    def repo(self):
+        return self._repo
+
+    @property
+    def host(self):
+        return self._host
+
+    @property
+    def port(self):
+        return self._port
