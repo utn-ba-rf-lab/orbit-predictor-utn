@@ -56,19 +56,27 @@ class SatTLEFetcher():
         with open(file, 'r', encoding='utf-8') as f:
             filebytes = f.read(MAX_BYTESIZE)
             doc = json.loads(filebytes)
+            failed_srcs = []
             if type(doc) == list:
                 for src in doc:
                     logger.debug(f'[d] Se leyó el registro: {src}')
-                    if (src.get('name') != None and src.get('url')!=None and not src['name'] in seen):
+                    if (src.get('name') != None
+                        and src.get('url') != None
+                        and not src['name'] in seen):
                         if (src.get('timestamp') == None):
                             src['timestamp'] = 0
+                        if (src.get('type') == None):
+                            src['type'] = 'group'
                         srcs_obj.append(src)
                         seen.append(src['name'])
-                    elif src.get('name') != None or src.get('url') != None:
-                        logger.warning(f'[w] El registro {src} no contiene al menos una de las dos claves necesarias para procesarlo, name o url.')
+                    elif src.get('name') == None or src.get('url') == None or src.get('type') == None:
+                        logger.warning(f'[w] El registro {src} no contiene al menos una de las tres claves necesarias para procesarlo, name, type o url.')
+                        failed_srcs.append(src)
                     elif src['name'] in seen:
                         logger.warning(f'[w] El registro {src} está duplicado en el archivo.')
-        
+            if failed_srcs != []:
+                with open(self.__workdir + '/Failed-TLE-SRCs.json', 'w', encoding='utf-8') as f2:
+                    json.dump(failed_srcs, f2, indent=4)
         return srcs_obj
     
     def __filename_from_srcname(self, srcname) -> str:
@@ -85,13 +93,52 @@ class SatTLEFetcher():
                 return True
         return False
     
-    def fetch_urls(self) -> list[str]:
+    def fetch_urls(self, sate_ids=[]) -> list[str]:
         #returns list of paths with resources to load.
         #caches sources in fetchs workdir
         
         srcfiles = []
-        
-        for src in self.__srcdb:
+
+        logger.debug(f'[d] Fuentes: {self.__srcdb}')
+
+        incomplete_srcs = list(
+                filter(lambda src: src.get('type') == "incomplete", self.__srcdb))
+
+        if (sate_ids == [] or incomplete_srcs == []):
+            srcfiles = self.fetch_group_urls()
+        else:
+            logger.debug(f'[d] Se encontraron las siguientes urls incompletas: ')
+            for src in incomplete_srcs:
+                logger.debug(f' - {src.get('name')}: {src.get('url')}')
+            for sate in sate_ids:
+                for src in incomplete_srcs:
+                    try:
+                        resp = requests.get(src.get('url') + str(sate), timeout=5)
+                    except requests.exceptions.Timeout:
+                        #handle request timeout
+                        logger.error(f'[E] La fuente {src['name']} falló por time out.')
+                        continue
+                    if (resp.status_code == 200):
+                        filepath = self.__filepath_from_srcname(src['name'] + str(sate))
+                        logger.debug(f'[d] Respuesta positiva, guardando resultado en {filepath}.')
+                        with open(filepath, 'wb') as f:
+                            f.write(resp.content)
+                        src['timestamp'] = int(datetime.now().timestamp())
+                        logger.debug(f'[d] Fuente usada: {next(__src for __src in self.__srcdb if (__src == src))}')
+
+                    srcfiles.append(self.__filepath_from_srcname(src['name'] + str(sate)))
+
+                    logger.debug(f'[d] Respuesta recibida de la fuente: {resp.text}')
+
+        with open(self.__srcsfile, 'w') as f:
+            json.dump(self.__srcdb, f, indent=4)
+
+        return srcfiles
+
+    def fetch_group_urls(self) -> list[str]:
+        srcfiles = []
+
+        for src in filter(lambda src: src.get('type') == 'group', self.__srcdb):
             if (not self.__verify_cached(src)):
                 url = src['url']
                 logger.debug(f'[d] Solicitando XML del url {url}.')
@@ -111,9 +158,6 @@ class SatTLEFetcher():
                     src['timestamp'] = int(datetime.now().timestamp())
             srcfiles.append(self.__filepath_from_srcname(src['name']))
 
-        with open(self.__srcsfile, 'w') as f:
-            json.dump(self.__srcdb, f)
-        
         return srcfiles
 
     def get_oldest_timestamp(self) -> datetime:
