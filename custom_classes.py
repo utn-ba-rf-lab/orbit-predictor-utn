@@ -1,5 +1,6 @@
 import datetime as dt
 import math
+from utils import format_fecha_utc
 
 class CustomPredictor():
     def __init__(self, predictor, name):
@@ -104,8 +105,8 @@ class CustomOverpass():
         return {
             "sate_name": self.sate_name,
             "sate_id": self.sate_id,
-            "aos": self.aos.isoformat() if hasattr(self.aos, "isoformat") else self.aos,
-            "los": self.los.isoformat() if hasattr(self.los, "isoformat") else self.los,
+            "aos": format_fecha_utc(self.aos),
+            "los": format_fecha_utc(self.los),
             "elev_max": f"{self.max_elevation_deg:.1f}°",
         }
 

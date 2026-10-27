@@ -1,4 +1,5 @@
 import re
+import datetime as dt
 
 MSNL=15 #MAX_SATE_NAME_LENGTH
 
@@ -26,3 +27,12 @@ def build_filtro(filtro: str):
 def sate_name_matches(sate_name, patron):
     sate_name = normalizar_sate_name(sate_name)
     return patron.match(sate_name)
+
+def format_fecha_utc(fecha):
+    if fecha is None:
+        return None
+
+    if not isinstance(fecha, dt.datetime):
+        return None
+    
+    return fecha.astimezone(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S") + " UTC"
