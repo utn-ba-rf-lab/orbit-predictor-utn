@@ -110,25 +110,27 @@ class SatTLEFetcher():
             logger.debug(f'[d] Se encontraron las siguientes urls incompletas: ')
             for src in incomplete_srcs:
                 logger.debug(f' - {src.get('name')}: {src.get('url')}')
-            for sate in sate_ids:
-                for src in incomplete_srcs:
-                    try:
-                        resp = requests.get(src.get('url') + str(sate), timeout=5)
-                    except requests.exceptions.Timeout:
-                        #handle request timeout
-                        logger.error(f'[E] La fuente {src['name']} falló por time out.')
-                        continue
-                    if (resp.status_code == 200):
-                        filepath = self.__filepath_from_srcname(src['name'] + str(sate))
-                        logger.debug(f'[d] Respuesta positiva, guardando resultado en {filepath}.')
-                        with open(filepath, 'wb') as f:
-                            f.write(resp.content)
-                        src['timestamp'] = int(datetime.now().timestamp())
-                        logger.debug(f'[d] Fuente usada: {next(__src for __src in self.__srcdb if (__src == src))}')
+            for src in incomplete_srcs:
+                for sate in sate_ids:
+                    if (not self.__verify_cached(src)):
+                        try:
+                            resp = requests.get(src.get('url') + str(sate), timeout=5)
+                        except requests.exceptions.Timeout:
+                            #handle request timeout
+                            logger.error(f'[E] La fuente {src['name']} falló por time out.')
+                            continue
+                        if (resp.status_code == 200):
+                            filepath = self.__filepath_from_srcname(src['name'] + str(sate))
+                            logger.debug(f'[d] Respuesta positiva, guardando resultado en {filepath}.')
+                            with open(filepath, 'wb') as f:
+                                f.write(resp.content)
+                            src['timestamp'] = int(datetime.now().timestamp())
+                            logger.debug(f'[d] Fuente usada: {next(__src for __src in self.__srcdb if (__src == src))}')
+
+                        logger.debug(f'[d] Respuesta recibida de la fuente: {resp.text}')
 
                     srcfiles.append(self.__filepath_from_srcname(src['name'] + str(sate)))
 
-                    logger.debug(f'[d] Respuesta recibida de la fuente: {resp.text}')
 
         with open(self.__srcsfile, 'w') as f:
             json.dump(self.__srcdb, f, indent=4)
