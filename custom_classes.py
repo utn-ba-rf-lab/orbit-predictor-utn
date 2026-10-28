@@ -1,6 +1,9 @@
 import datetime as dt
 import math
+import logging
 from utils import format_fecha_utc
+
+logger = logging.getLogger(__name__)
 
 class CustomPredictor():
     def __init__(self, predictor, name):
@@ -63,6 +66,22 @@ class CustomPredictor():
 
         return _orbit_number
 
+    def launch_year(self):
+        """
+        Calcula el año de lanzamiento del satélite en base
+        a la fecha indicada por el TLE.
+
+        Returns:
+            int: Año de lanzamiento del satélite.
+        """
+
+        _launch_year = int (self._predictor.tle.lines[0][9:11])
+
+        if _launch_year > 60:
+            _launch_year += + 1900
+        else:
+            _launch_year += 2000
+        return _launch_year
 
 class CustomOverpass():
     def __init__(self, pasada, predictor):

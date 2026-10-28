@@ -181,7 +181,7 @@ async def main() -> None:
     recovered_passes = []
     task_to_pass_map= {}
 
-    data_expose = PassRepository(ARGS)
+    data_expose = PassRepository(ARGS, pred_db)
 
     logger.info("-" * 50)
 

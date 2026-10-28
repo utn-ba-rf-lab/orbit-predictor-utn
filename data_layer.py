@@ -21,12 +21,13 @@ class PassRepository:
             cls._instance = super(PassRepository, cls).__new__(cls)
         return cls._instance
     
-    def __init__(self, ARGS):
+    def __init__(self, ARGS, pred_db):
         if not hasattr(self, "_initialized"):  # evita re-inicializar
             self._initialized = True
             self._future_passes: List[CustomOverpass] = []
             self._past_passes: List[CustomOverpass] = []
             self._observers = []
+            self._satellites = pred_db
 
             #Registrar Observadores
             if ARGS.PASSES_OUTFILE: self._observers.append(FilePassesObserver(self, filename=ARGS.PASSES_OUTFILE))
@@ -51,6 +52,10 @@ class PassRepository:
     @property
     def past_passes(self):
         return self._past_passes
+
+    @property
+    def satellites(self):
+        return self._satellites
 
 
 class BasePassesObserver(ABC):
@@ -130,6 +135,27 @@ class PassesApiService():
         @self.app.get("/passes/last")
         def get_last_pass(filters: Annotated[PassesApiService.PassFilterParams, Query()]):
             return _get_passes(self.repo.past_passes, filters, limit=True)
+
+        def _get_satellites(pred_db, filters):
+            results = pred_db
+
+            if filters.sate_id is not None:
+                results = [p for p in results if p.sate_id == filters.sate_id]
+
+            if filters.sate_name is not None:
+
+                filtro = utils.build_filtro(filters.sate_name)
+
+                results = [
+                    p for p in results
+                    if utils.sate_name_matches(p.sate_name, filtro)
+                ]
+
+            return [dict(sate_name=p.sate_name, sate_id=p.sate_id, launch_year=p.launch_year()) for p in results]
+
+        @self.app.get("/satellites")
+        def get_satellites(filters: Annotated[PassesApiService.PassFilterParams, Query()]):
+            return _get_satellites(self.repo.satellites, filters)
 
         # Lanzar uvicorn en un hilo separado
         thread = threading.Thread(
