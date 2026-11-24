@@ -100,8 +100,8 @@ class PassesApiService():
         # Crear la app FastAPI
         self.app = FastAPI()
 
-        def _get_passes(passes, filters, limit = False):
-            results = passes
+        def _filter_elements_by_name_id(elements, filters):
+            results = elements
             
             if filters.sate_id is not None:
                 results = [p for p in results if p.sate_id == filters.sate_id]
@@ -114,6 +114,12 @@ class PassesApiService():
                     p for p in results
                     if utils.sate_name_matches(p.sate_name, filtro)
                 ]
+
+            return results
+
+        def _get_passes(passes, filters, limit = False):
+
+            results = _filter_elements_by_name_id(passes, filters)
 
             if limit == True:
                 return results[0].to_dict() if results else {}
@@ -137,19 +143,7 @@ class PassesApiService():
             return _get_passes(self.repo.past_passes, filters, limit=True)
 
         def _get_satellites(pred_db, filters):
-            results = pred_db
-
-            if filters.sate_id is not None:
-                results = [p for p in results if p.sate_id == filters.sate_id]
-
-            if filters.sate_name is not None:
-
-                filtro = utils.build_filtro(filters.sate_name)
-
-                results = [
-                    p for p in results
-                    if utils.sate_name_matches(p.sate_name, filtro)
-                ]
+            results = _filter_elements_by_name_id(pred_db, filters)
 
             return [dict(sate_name=p.sate_name, sate_id=p.sate_id, launch_year=p.launch_year()) for p in results]
 
