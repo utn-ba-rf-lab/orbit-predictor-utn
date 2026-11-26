@@ -21,12 +21,13 @@ class PassRepository:
             cls._instance = super(PassRepository, cls).__new__(cls)
         return cls._instance
     
-    def __init__(self, ARGS):
+    def __init__(self, ARGS, pred_db):
         if not hasattr(self, "_initialized"):  # evita re-inicializar
             self._initialized = True
             self._future_passes: List[CustomOverpass] = []
             self._past_passes: List[CustomOverpass] = []
             self._observers = []
+            self._satellites = pred_db
 
             #Registrar Observadores
             if ARGS.PASSES_OUTFILE: self._observers.append(FilePassesObserver(self, filename=ARGS.PASSES_OUTFILE))
@@ -51,6 +52,10 @@ class PassRepository:
     @property
     def past_passes(self):
         return self._past_passes
+
+    @property
+    def satellites(self):
+        return self._satellites
 
 
 class BasePassesObserver(ABC):
@@ -95,8 +100,8 @@ class PassesApiService():
         # Crear la app FastAPI
         self.app = FastAPI()
 
-        def _get_passes(passes, filters, limit = False):
-            results = passes
+        def _filter_elements_by_name_id(elements, filters):
+            results = elements
             
             if filters.sate_id is not None:
                 results = [p for p in results if p.sate_id == filters.sate_id]
@@ -109,6 +114,12 @@ class PassesApiService():
                     p for p in results
                     if utils.sate_name_matches(p.sate_name, filtro)
                 ]
+
+            return results
+
+        def _get_passes(passes, filters, limit = False):
+
+            results = _filter_elements_by_name_id(passes, filters)
 
             if limit == True:
                 return results[0].to_dict() if results else {}
@@ -130,6 +141,15 @@ class PassesApiService():
         @self.app.get("/passes/last")
         def get_last_pass(filters: Annotated[PassesApiService.PassFilterParams, Query()]):
             return _get_passes(self.repo.past_passes, filters, limit=True)
+
+        def _get_satellites(pred_db, filters):
+            results = _filter_elements_by_name_id(pred_db, filters)
+
+            return [dict(sate_name=p.sate_name, sate_id=p.sate_id, launch_year=p.launch_year()) for p in results]
+
+        @self.app.get("/satellites")
+        def get_satellites(filters: Annotated[PassesApiService.PassFilterParams, Query()]):
+            return _get_satellites(self.repo.satellites, filters)
 
         # Lanzar uvicorn en un hilo separado
         thread = threading.Thread(
